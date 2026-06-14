@@ -1,0 +1,140 @@
+.cc-root {
+  --cc-bg: #ffffff;
+  --cc-fg: #0f0f0f;
+  --cc-muted: #606060;
+  --cc-border: #e5e5e5;
+  --cc-banner-bg: #f2f2f2;
+  --cc-accent: #2563eb;
+
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  width: 100%;
+  background: var(--cc-bg);
+  color: var(--cc-fg);
+  font-family: "Roboto", "Segoe UI", system-ui, sans-serif;
+  font-size: 13px;
+  line-height: 1.4;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.cc-root[data-theme="dark"] {
+  --cc-bg: #0f0f0f;
+  --cc-fg: #f1f1f1;
+  --cc-muted: #aaaaaa;
+  --cc-border: #2a2a2a;
+  --cc-banner-bg: #1c1c1c;
+  --cc-accent: #3b82f6;
+}
+
+.cc-banner {
+  flex: 0 0 auto;
+  padding: 6px 12px;
+  font-size: 12px;
+  color: var(--cc-muted);
+  background: var(--cc-banner-bg);
+  border-bottom: 1px solid var(--cc-border);
+}
+.cc-banner[data-status="error"] {
+  color: #fff;
+  background: #b91c1c;
+}
+.cc-banner[data-status="connected"] {
+  color: #16a34a;
+}
+
+.cc-messages {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 6px 12px;
+  overflow-wrap: anywhere;
+}
+
+.cc-msg {
+  padding: 2px 0;
+}
+.cc-name {
+  font-weight: 700;
+}
+.cc-badge {
+  height: 18px;
+  vertical-align: middle;
+  margin-right: 3px;
+}
+.cc-emote {
+  height: 28px;
+  vertical-align: middle;
+  margin: 0 1px;
+}
+
+.cc-mapping {
+  flex: 0 0 auto;
+  padding: 12px;
+  border-top: 1px solid var(--cc-border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.cc-mapping p {
+  margin: 0;
+  color: var(--cc-muted);
+}
+.cc-mapping-row {
+  display: flex;
+  gap: 6px;
+}
+.cc-mapping input {
+  flex: 1 1 auto;
+  padding: 6px 8px;
+  border: 1px solid var(--cc-border);
+  border-radius: 4px;
+  background: var(--cc-bg);
+  color: var(--cc-fg);
+}
+.cc-mapping button {
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 4px;
+  background: var(--cc-accent);
+  color: #fff;
+  cursor: pointer;
+}
+.cc-mapping button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.cc-hidden {
+  display: none !important;
+}
+
+/* Enable/disable toggle, overlaid in the chat frame's top-right corner. Lives
+   as a sibling of YouTube's chat (when off) or our panel (when on), always on
+   top so it stays clickable in either state. */
+.cc-toggle {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 10;
+  padding: 6px 10px;
+  font: 600 12px/1 "Roboto", "Segoe UI", system-ui, sans-serif;
+  color: #fff;
+  background: #9147ff; /* Twitch purple */
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+.cc-toggle:hover {
+  background: #772ce8;
+}
+.cc-toggle[data-on="1"] {
+  background: rgba(0, 0, 0, 0.55);
+}
+.cc-toggle[data-on="1"]:hover {
+  background: rgba(0, 0, 0, 0.7);
+}

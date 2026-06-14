@@ -1,0 +1,18 @@
+{
+  "name": "crosschat",
+  "version": "0.0.1",
+  "description": "Replace YouTube live chat with a self-rendered Twitch chat panel that renders 7TV/BTTV/FFZ emotes.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@crxjs/vite-plugin": "^2.0.0",
+    "@types/chrome": "^0.1.43",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.16"
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "CrossChat",
+  "version": "0.0.1",
+  "description": "Replaces YouTube live chat with a Twitch chat panel rendering 7TV, BTTV and FFZ emotes.",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "*://*.youtube.com/*",
+    "*://*.twitch.tv/*",
+    "*://7tv.io/*",
+    "*://*.7tv.app/*",
+    "*://*.betterttv.net/*",
+    "*://*.frankerfacez.com/*",
+    "*://static-cdn.jtvnw.net/*",
+    "*://cdn.7tv.app/*",
+    "*://cdn.betterttv.net/*",
+    "*://cdn.frankerfacez.com/*"
+  ],
+  "background": {
+    "service_worker": "src/background/service-worker.ts",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://*.youtube.com/*"],
+      "js": ["src/content/youtube-adapter.ts"],
+      "run_at": "document_idle"
+    }
+  ]
+}
