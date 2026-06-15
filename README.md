@@ -47,12 +47,9 @@ Developer mode → **Load unpacked**.
    Click **↩ YouTube chat** to switch back at any time.
 5. Navigate to another stream without reloading → the toggle resets; enable it again there.
 
-## Known caveat to verify in-browser
+## Content-Security-Policy note
 
 Emote images are injected as `<img>` into the YouTube document, so they load under
-**YouTube's page Content-Security-Policy**. If emotes resolve to image fragments but don't
-visually appear (broken images), YouTube's `img-src` CSP is blocking the emote CDNs
-(`cdn.7tv.app`, `cdn.betterttv.net`, `cdn.frankerfacez.com`, `static-cdn.jtvnw.net`). The
-fix is a `declarativeNetRequest` rule to relax `img-src` for those origins on youtube.com —
-not added yet because it should only be introduced once confirmed necessary. The chat read
-path and emote logic are independent of this and are verified.
+**YouTube's page Content-Security-Policy**. This has been verified in-browser: emotes from
+all CDNs (`cdn.7tv.app`, `cdn.betterttv.net`, `cdn.frankerfacez.com`, `static-cdn.jtvnw.net`)
+render fine, so no `declarativeNetRequest` rule to relax `img-src` is needed.
