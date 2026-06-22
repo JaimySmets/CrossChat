@@ -12,6 +12,8 @@ export interface Badge {
   url?: string;
   /** Human-readable title/tooltip when known. */
   title?: string;
+  /** Set version from the wire payload (e.g. Twitch `subscriber/12`); used to resolve artwork. */
+  version?: string;
   /** Tenure for cumulative badges (e.g. subscriber months from Twitch `badge-info`). */
   count?: number;
 }

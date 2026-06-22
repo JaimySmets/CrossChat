@@ -178,8 +178,9 @@ function parseBadges(raw: string | undefined, info: string | undefined): Badge[]
   // `badges` version number which only selects the badge image tier.
   const tenure = parseBadgeInfo(info);
   return raw.split(",").map((b) => {
-    const [id] = b.split("/");
-    const badge: Badge = { id }; // image URLs resolved later; render skips badges without url
+    const [id, version] = b.split("/");
+    const badge: Badge = { id }; // image URLs resolved later (badge registry), else a chip
+    if (version) badge.version = version;
     if (tenure[id] !== undefined) badge.count = tenure[id];
     return badge;
   });

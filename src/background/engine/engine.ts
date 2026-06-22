@@ -6,6 +6,7 @@ import type { WorkerPort } from "../../shared/messaging";
 import { TwitchIrcSource } from "../sources/twitch-irc-source";
 import { buildRegistry, EmoteRegistry } from "../emotes/registry";
 import { applyRegistry } from "../emotes/apply";
+import { buildBadgeRegistry, applyBadges, BadgeRegistry } from "../badges/twitch-badges";
 import { getMapping, setMapping } from "./channel-map";
 import { resolveTwitchChannel } from "./resolve";
 
@@ -13,6 +14,7 @@ export class Session {
   private source: ChatSource | null = null;
   private handle: string | null = null;
   private registry: EmoteRegistry | null = null;
+  private badges: BadgeRegistry | null = null;
 
   constructor(private readonly port: WorkerPort) {}
 
@@ -35,6 +37,7 @@ export class Session {
     this.source?.disconnect();
     this.source = null;
     this.registry = null;
+    this.badges = null;
   }
 
   private async connect(login: string): Promise<void> {
@@ -55,6 +58,16 @@ export class Session {
         /* registry stays null; messages render with native emotes only */
       });
 
+    // Resolve real badge artwork in parallel; on failure badges stay null and
+    // render.ts falls back to CSS role chips.
+    void buildBadgeRegistry(channel)
+      .then((badges) => {
+        this.badges = badges;
+      })
+      .catch(() => {
+        /* badges stay null; role chips remain the fallback */
+      });
+
     const source = new TwitchIrcSource();
     source.onState((state) => this.port.send({ type: "state", state }));
     source.onMessage((msg) => this.emit(msg));
@@ -63,7 +76,8 @@ export class Session {
   }
 
   private emit(msg: NormalizedMessage): void {
-    const composited = this.registry ? applyRegistry(msg, this.registry) : msg;
-    this.port.send({ type: "message", message: composited });
+    let out = this.registry ? applyRegistry(msg, this.registry) : msg;
+    if (this.badges) out = applyBadges(out, this.badges);
+    this.port.send({ type: "message", message: out });
   }
 }

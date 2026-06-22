@@ -65,6 +65,10 @@ no-auth MVP:
 - Twitch user id is resolved with **no auth via FFZ's room endpoint** (`engine/resolve.ts` →
   `emotes/ffz.ts`), not Helix `/users`. If FFZ has no record, `userId` is empty but IRC read
   still works (channel-specific emotes just won't load).
+- Badges are resolved to real artwork via **anonymous Twitch GraphQL** (`badges/twitch-badges.ts`,
+  public web Client-Id, no secret), not Helix `/chat/badges`. It's layered behind a `getUserToken()`
+  seam so the official Helix path drops in once OAuth exists; on any miss/failure `render.ts` falls
+  back to the CSS role chips. Like IRC/FFZ, the gql endpoint is an undocumented no-auth spike.
 - **No OAuth, no `ChatSink`, no sending, no Kick** yet — these are interface-ready but unbuilt.
 
 When extending toward the doc's design, treat IRC/FFZ-resolution as the throwaway spike it was

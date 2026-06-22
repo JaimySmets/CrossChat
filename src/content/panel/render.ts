@@ -73,33 +73,33 @@ export function renderMessage(msg: NormalizedMessage, settings: ChatSettings): H
   time.textContent = formatTime(msg.timestamp);
   line.appendChild(time);
 
-  // Lightweight role chips derived from badge ids (no image fetch).
+  // Badges: prefer real artwork when the registry resolved a URL, otherwise fall
+  // back to a lightweight CSS role chip (no image fetch). Subscribers surface
+  // their cumulative months (from badge-info) in the tooltip either way.
   for (const badge of msg.author.badges) {
+    const tooltip =
+      badge.id === "subscriber" && badge.count
+        ? `Subscribed for ${badge.count} ${badge.count === 1 ? "month" : "months"}`
+        : (badge.title ?? badge.id);
+
+    if (badge.url) {
+      const img = document.createElement("img");
+      img.className = "cc-badge";
+      img.src = badge.url;
+      img.alt = tooltip;
+      img.title = tooltip;
+      line.appendChild(img);
+      continue;
+    }
+
     const label = ROLE_LABELS[badge.id];
     if (!label) continue;
     const chip = document.createElement("span");
     chip.className = "cc-chip";
     chip.dataset.role = badge.id;
     chip.textContent = label;
-    // Subscribers carry their cumulative months (from badge-info) — surface it
-    // in the tooltip, keeping the chip itself a plain "SUB".
-    if (badge.id === "subscriber" && badge.count) {
-      chip.title = `Subscribed for ${badge.count} ${badge.count === 1 ? "month" : "months"}`;
-    } else {
-      chip.title = badge.title ?? badge.id;
-    }
+    chip.title = tooltip;
     line.appendChild(chip);
-  }
-
-  // Real badge images, when a source has resolved their URLs.
-  for (const badge of msg.author.badges) {
-    if (!badge.url) continue;
-    const b = document.createElement("img");
-    b.className = "cc-badge";
-    b.src = badge.url;
-    b.alt = badge.title ?? badge.id;
-    b.title = badge.title ?? badge.id;
-    line.appendChild(b);
   }
 
   const name = document.createElement("span");
