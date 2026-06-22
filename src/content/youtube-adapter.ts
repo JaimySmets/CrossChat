@@ -57,15 +57,13 @@ class CrossChatAdapter {
   private currentHandle: string | null = null;
   private frame: HTMLElement | null = null;
   private toggle: HTMLButtonElement | null = null;
-  /** YouTube's native chat children, stashed (not destroyed) while CrossChat is on. */
-  private stashed: ChildNode[] | null = null;
   private enabled = false;
   private frameObserver: MutationObserver | null = null;
   private theaterObserver: MutationObserver | null = null;
   private readonly darkQuery = window.matchMedia("(prefers-color-scheme: dark)");
 
   start(): void {
-    this.darkQuery.addEventListener("change", (e) => this.panel?.setTheme(e.matches));
+    this.darkQuery.addEventListener("change", (e) => this.panel?.setSystemDark(e.matches));
     // YouTube is a SPA — re-evaluate on in-app navigation (§7 SPA caveat).
     window.addEventListener("yt-navigate-finish", () => void this.sync());
     void this.sync();
@@ -108,16 +106,20 @@ class CrossChatAdapter {
       btn.addEventListener("click", () => (this.enabled ? this.disable() : this.enable()));
       this.toggle = btn;
     }
-    // The toggle is absolutely positioned within the frame; give it a context.
+    // When floating, the toggle is absolutely positioned within the frame; give
+    // it a positioning context. While enabled it lives in the panel header
+    // instead (see enable()), so don't yank it back into the frame here.
     if (getComputedStyle(frame).position === "static") frame.style.position = "relative";
     this.updateToggleLabel();
-    if (this.toggle.parentElement !== frame) frame.appendChild(this.toggle);
+    if (!this.enabled && this.toggle.parentElement !== frame) frame.appendChild(this.toggle);
   }
 
   private updateToggleLabel(): void {
     if (!this.toggle) return;
     this.toggle.textContent = this.enabled ? "↩ YouTube chat" : "Enable Twitch chat";
     this.toggle.dataset.on = this.enabled ? "1" : "0";
+    // Floating overlay only while disabled; in-header button while enabled.
+    this.toggle.dataset.floating = this.enabled ? "0" : "1";
   }
 
   // --- Enable / disable ---------------------------------------------------
@@ -125,19 +127,24 @@ class CrossChatAdapter {
   private enable(): void {
     if (this.enabled || !this.frame || !this.currentHandle) return;
 
-    // Stash YouTube's native chat (everything except our own toggle) so we can
-    // restore it on disable instead of destroying it.
-    this.stashed = Array.from(this.frame.childNodes).filter((n) => n !== this.toggle);
-    for (const n of this.stashed) n.remove();
+    // Hide YouTube's native chat rather than detaching it: the live chat is an
+    // <iframe>, and removing an iframe from the DOM discards its browsing
+    // context, so re-inserting it later yields a blank frame. A CSS marker
+    // (see panel.css) keeps the iframe's document alive while it's hidden.
+    this.frame.dataset.ccHijacked = "1";
 
     const panel = new Panel();
-    panel.setTheme(this.darkQuery.matches);
+    panel.setSystemDark(this.darkQuery.matches);
+    void panel.init();
     this.panel = panel;
     // Panel fills the frame via CSS (height/width 100%); YouTube sizes/positions
     // the frame itself in both default and theatre layouts.
-    this.frame.insertBefore(panel.root, this.toggle);
+    this.frame.appendChild(panel.root);
     this.enabled = true;
     this.updateToggleLabel();
+    // Re-home the toggle from its floating overlay into the panel header, beside
+    // the gear, now that a header exists to hold it.
+    if (this.toggle) panel.mountAction(this.toggle);
 
     this.ensurePort();
     this.port!.send({ type: "attach", youtubeHandle: this.currentHandle });
@@ -146,12 +153,13 @@ class CrossChatAdapter {
   private disable(): void {
     if (!this.enabled) return;
     this.port?.send({ type: "detach" });
+    // Rescue the toggle from the panel header before the panel is destroyed, so
+    // it survives as the floating overlay over the revealed native chat.
+    if (this.toggle && this.frame) this.frame.appendChild(this.toggle);
     this.panel?.destroy();
     this.panel = null;
-    if (this.frame && this.stashed) {
-      for (const n of this.stashed) this.frame.insertBefore(n, this.toggle);
-    }
-    this.stashed = null;
+    // Reveal YouTube's native chat again (it was only hidden, never detached).
+    if (this.frame) delete this.frame.dataset.ccHijacked;
     this.enabled = false;
     this.updateToggleLabel();
   }
@@ -177,25 +185,23 @@ class CrossChatAdapter {
   /**
    * Re-establish our DOM invariant after any YouTube mutation. Idempotent and
    * self-terminating (reaches a fixpoint, so it won't loop on its own writes):
-   *  - the toggle is always present and stays on top (last child);
-   *  - when enabled, the frame holds only our panel + toggle (re-stamped YouTube
-   *    chat is removed — this is what prevents the theatre overlap).
+   *  - when enabled, the hijack marker stays set (so any re-stamped native chat
+   *    is hidden by CSS, preventing the theatre overlap) and our panel stays
+   *    mounted; the toggle rides inside the panel header, untouched here.
+   *  - when disabled, the floating toggle overlay stays present and on top.
    */
   private reassert(): void {
     const frame = this.frame;
     if (!frame) return;
 
     if (this.enabled && this.panel) {
-      for (const child of Array.from(frame.children)) {
-        if (child !== this.panel.root && child !== this.toggle) child.remove();
-      }
-      if (this.panel.root.parentElement !== frame) {
-        frame.insertBefore(this.panel.root, this.toggle);
-      }
+      frame.dataset.ccHijacked = "1";
+      if (this.panel.root.parentElement !== frame) frame.appendChild(this.panel.root);
+      return;
     }
 
     if (this.toggle && frame.lastElementChild !== this.toggle) {
-      frame.appendChild(this.toggle); // keep on top
+      frame.appendChild(this.toggle); // keep the floating overlay on top
     }
   }
 

@@ -108,7 +108,7 @@ export class TwitchIrcSource implements ChatSource {
       author: {
         displayName: tags["display-name"] || login,
         color: tags["color"] || undefined,
-        badges: parseBadges(tags["badges"]),
+        badges: parseBadges(tags["badges"], tags["badge-info"]),
       },
       fragments: buildFragments(text, tags["emotes"]),
       timestamp: tags["tmi-sent-ts"] ? Number(tags["tmi-sent-ts"]) : Date.now(),
@@ -172,12 +172,29 @@ function unescapeTag(v: string): string {
     .replace(/\\\\/g, "\\");
 }
 
-function parseBadges(raw: string | undefined): Badge[] {
+function parseBadges(raw: string | undefined, info: string | undefined): Badge[] {
   if (!raw) return [];
+  // `badge-info` carries true tenure (e.g. subscriber months), separate from the
+  // `badges` version number which only selects the badge image tier.
+  const tenure = parseBadgeInfo(info);
   return raw.split(",").map((b) => {
     const [id] = b.split("/");
-    return { id }; // image URLs resolved later; render skips badges without url
+    const badge: Badge = { id }; // image URLs resolved later; render skips badges without url
+    if (tenure[id] !== undefined) badge.count = tenure[id];
+    return badge;
   });
+}
+
+/** Parse the `badge-info` tag (`subscriber/15,...`) into id → numeric tenure. */
+function parseBadgeInfo(raw: string | undefined): Record<string, number> {
+  const out: Record<string, number> = {};
+  if (!raw) return out;
+  for (const part of raw.split(",")) {
+    const [id, val] = part.split("/");
+    const n = Number(val);
+    if (id && Number.isFinite(n)) out[id] = n;
+  }
+  return out;
 }
 
 /**

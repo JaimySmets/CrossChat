@@ -1,6 +1,15 @@
 // Pure DOM rendering for normalized messages (ARCHITECTURE.md §4.3).
 // Operates only on NormalizedMessage — no platform-specific knowledge here.
 import type { Fragment, NormalizedMessage } from "../../shared/types";
+import type { ChatSettings } from "../settings";
+
+/** Badge ids we surface as lightweight role chips, in chip-display order. */
+const ROLE_LABELS: Record<string, string> = {
+  broadcaster: "HOST",
+  moderator: "MOD",
+  vip: "VIP",
+  subscriber: "SUB",
+};
 
 function renderFragments(fragments: Fragment[]): DocumentFragment {
   const frag = document.createDocumentFragment();
@@ -12,21 +21,77 @@ function renderFragments(fragments: Fragment[]): DocumentFragment {
       img.className = "cc-emote";
       img.src = part.url;
       img.alt = part.name;
-      img.title = part.name;
-      img.loading = "lazy";
+      // No native `title`: the panel shows a richer hover card (name + preview)
+      // keyed off these data attributes.
+      img.dataset.name = part.name;
       img.dataset.provider = part.provider;
+      img.loading = "lazy";
       frag.appendChild(img);
     }
   }
   return frag;
 }
 
+/** Concatenated text content of a message, lowercased, for keyword matching. */
+function messageText(msg: NormalizedMessage): string {
+  let out = "";
+  for (const part of msg.fragments) if (part.type === "text") out += part.value;
+  return out.toLowerCase();
+}
+
+function matchesKeyword(text: string, keywords: string[]): boolean {
+  for (const kw of keywords) {
+    const k = kw.toLowerCase();
+    if (!k) continue;
+    const re = new RegExp(`(?:^|\\W)${escapeRegExp(k)}(?:$|\\W)`);
+    if (re.test(text)) return true;
+  }
+  return false;
+}
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function formatTime(ts: number): string {
+  return new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
 /** Build one chat-line element for a normalized message. */
-export function renderMessage(msg: NormalizedMessage): HTMLElement {
+export function renderMessage(msg: NormalizedMessage, settings: ChatSettings): HTMLElement {
   const line = document.createElement("div");
   line.className = "cc-msg";
   line.dataset.id = msg.id;
 
+  if (settings.highlightKeywords.length && matchesKeyword(messageText(msg), settings.highlightKeywords)) {
+    line.classList.add("cc-msg--highlight");
+  }
+
+  // Timestamp — always rendered; CSS hides it when timestamps are off.
+  const time = document.createElement("span");
+  time.className = "cc-time";
+  time.textContent = formatTime(msg.timestamp);
+  line.appendChild(time);
+
+  // Lightweight role chips derived from badge ids (no image fetch).
+  for (const badge of msg.author.badges) {
+    const label = ROLE_LABELS[badge.id];
+    if (!label) continue;
+    const chip = document.createElement("span");
+    chip.className = "cc-chip";
+    chip.dataset.role = badge.id;
+    chip.textContent = label;
+    // Subscribers carry their cumulative months (from badge-info) — surface it
+    // in the tooltip, keeping the chip itself a plain "SUB".
+    if (badge.id === "subscriber" && badge.count) {
+      chip.title = `Subscribed for ${badge.count} ${badge.count === 1 ? "month" : "months"}`;
+    } else {
+      chip.title = badge.title ?? badge.id;
+    }
+    line.appendChild(chip);
+  }
+
+  // Real badge images, when a source has resolved their URLs.
   for (const badge of msg.author.badges) {
     if (!badge.url) continue;
     const b = document.createElement("img");

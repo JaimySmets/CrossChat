@@ -5,6 +5,10 @@
   --cc-border: #e5e5e5;
   --cc-banner-bg: #f2f2f2;
   --cc-accent: #2563eb;
+  --cc-altrow: rgba(0, 0, 0, 0.04);
+  --cc-highlight: rgba(37, 99, 235, 0.12);
+  --cc-font-size: 13px;
+  --cc-emote-scale: 1;
 
   display: flex;
   flex-direction: column;
@@ -12,10 +16,11 @@
   min-height: 0;
   height: 100%;
   width: 100%;
+  position: relative; /* positioning context for the settings + emote-hover cards */
   background: var(--cc-bg);
   color: var(--cc-fg);
   font-family: "Roboto", "Segoe UI", system-ui, sans-serif;
-  font-size: 13px;
+  font-size: var(--cc-font-size);
   line-height: 1.4;
   overflow: hidden;
   box-sizing: border-box;
@@ -28,10 +33,17 @@
   --cc-border: #2a2a2a;
   --cc-banner-bg: #1c1c1c;
   --cc-accent: #3b82f6;
+  --cc-altrow: rgba(255, 255, 255, 0.05);
+  --cc-highlight: rgba(59, 130, 246, 0.18);
 }
 
 .cc-banner {
+  position: relative;
   flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   padding: 6px 12px;
   font-size: 12px;
   color: var(--cc-muted);
@@ -42,8 +54,32 @@
   color: #fff;
   background: #b91c1c;
 }
-.cc-banner[data-status="connected"] {
+.cc-banner[data-status="connected"] .cc-status {
   color: #16a34a;
+}
+
+.cc-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.cc-gear {
+  flex: 0 0 auto;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 15px;
+  line-height: 1;
+  padding: 2px 4px;
+  cursor: pointer;
+  opacity: 0.75;
+  border-radius: 4px;
+}
+.cc-gear:hover {
+  opacity: 1;
+  background: var(--cc-border);
 }
 
 .cc-messages {
@@ -55,8 +91,31 @@
 }
 
 .cc-msg {
-  padding: 2px 0;
+  padding: 2px 4px;
 }
+.cc-root[data-density="compact"] .cc-msg {
+  padding: 1px 4px;
+  line-height: 1.25;
+}
+.cc-root[data-altrows="1"] .cc-msg:nth-child(even) {
+  background: var(--cc-altrow);
+}
+.cc-msg--highlight {
+  background: var(--cc-highlight);
+  border-left: 3px solid var(--cc-accent);
+  padding-left: 1px;
+}
+
+.cc-time {
+  color: var(--cc-muted);
+  font-variant-numeric: tabular-nums;
+  margin-right: 6px;
+  font-size: 0.85em;
+}
+.cc-root:not([data-timestamps="1"]) .cc-time {
+  display: none;
+}
+
 .cc-name {
   font-weight: 700;
 }
@@ -66,9 +125,38 @@
   margin-right: 3px;
 }
 .cc-emote {
-  height: 28px;
+  height: calc(28px * var(--cc-emote-scale));
   vertical-align: middle;
   margin: 0 1px;
+}
+
+/* Lightweight role chips derived from badge ids (no image fetch). */
+.cc-chip {
+  display: inline-block;
+  vertical-align: middle;
+  font-size: 0.7em;
+  font-weight: 700;
+  line-height: 1.4;
+  padding: 0 4px;
+  margin-right: 4px;
+  border-radius: 3px;
+  color: #fff;
+  background: var(--cc-muted);
+}
+.cc-root:not([data-roles="1"]) .cc-chip {
+  display: none;
+}
+.cc-chip[data-role="broadcaster"] {
+  background: #e91916;
+}
+.cc-chip[data-role="moderator"] {
+  background: #00ad03;
+}
+.cc-chip[data-role="vip"] {
+  background: #e005b9;
+}
+.cc-chip[data-role="subscriber"] {
+  background: #6441a5;
 }
 
 .cc-mapping {
@@ -108,29 +196,140 @@
   cursor: default;
 }
 
+/* Settings popover, anchored under the gear in the header's top-right. */
+.cc-settings {
+  position: absolute;
+  top: 34px;
+  right: 8px;
+  z-index: 20;
+  width: 220px;
+  max-width: calc(100% - 16px);
+  padding: 10px 12px;
+  background: var(--cc-bg);
+  color: var(--cc-fg);
+  border: 1px solid var(--cc-border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 12px;
+}
+.cc-set-title {
+  font-weight: 700;
+  font-size: 13px;
+  margin-bottom: 2px;
+}
+.cc-set-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  cursor: pointer;
+}
+.cc-set-label {
+  color: var(--cc-muted);
+}
+.cc-set-inline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.cc-set-value {
+  color: var(--cc-muted);
+  font-variant-numeric: tabular-nums;
+  min-width: 30px;
+  text-align: right;
+}
+.cc-settings select,
+.cc-settings input[type="text"] {
+  background: var(--cc-bg);
+  color: var(--cc-fg);
+  border: 1px solid var(--cc-border);
+  border-radius: 4px;
+  padding: 3px 6px;
+  font: inherit;
+}
+.cc-settings input[type="text"] {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.cc-settings input[type="range"] {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* Emote hover card: large preview + name + provider, à la 7TV/BTTV/FFZ. A single
+   shared node the panel repositions; pointer-events:none so it never flickers. */
+.cc-emote-tip {
+  position: absolute;
+  z-index: 30;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px;
+  background: var(--cc-bg);
+  border: 1px solid var(--cc-border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+}
+.cc-emote-tip img {
+  max-width: 144px;
+  max-height: 96px;
+}
+.cc-emote-tip-name {
+  font-weight: 700;
+  font-size: 12px;
+  color: var(--cc-fg);
+  text-align: center;
+  word-break: break-all;
+}
+.cc-emote-tip-provider {
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--cc-muted);
+}
+
 .cc-hidden {
   display: none !important;
 }
 
-/* Enable/disable toggle, overlaid in the chat frame's top-right corner. Lives
-   as a sibling of YouTube's chat (when off) or our panel (when on), always on
-   top so it stays clickable in either state. */
+/* While CrossChat is enabled, hide YouTube's native chat in place instead of
+   detaching it — the chat is an <iframe>, and removing it from the DOM discards
+   its browsing context (re-inserting gives a blank frame). display:none keeps
+   the iframe's document alive, so disabling CrossChat reveals a live chat. Our
+   own panel and floating toggle are exempt. */
+ytd-live-chat-frame[data-cc-hijacked="1"] > *:not(.cc-root):not(.cc-toggle) {
+  display: none !important;
+}
+
+/* Enable/disable toggle. While CrossChat is OFF it floats over the chat frame's
+   top-right corner (data-floating="1"); while ON it's a normal button in the
+   panel header beside the gear (data-floating="0"). */
 .cc-toggle {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  z-index: 10;
-  padding: 6px 10px;
-  font: 600 12px/1 "Roboto", "Segoe UI", system-ui, sans-serif;
+  flex: 0 0 auto;
+  padding: 4px 8px;
+  font: 600 11px/1.2 "Roboto", "Segoe UI", system-ui, sans-serif;
   color: #fff;
   background: #9147ff; /* Twitch purple */
   border: 0;
   border-radius: 6px;
   cursor: pointer;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+  white-space: nowrap;
 }
 .cc-toggle:hover {
   background: #772ce8;
+}
+.cc-toggle[data-floating="1"] {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 10;
+  padding: 6px 10px;
+  font-size: 12px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
 }
 .cc-toggle[data-on="1"] {
   background: rgba(0, 0, 0, 0.55);

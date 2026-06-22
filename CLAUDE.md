@@ -75,9 +75,13 @@ live docs — these endpoints churn.
 
 YouTube is a SPA and re-stamps the chat frame on theatre toggles and navigation. The adapter
 relies on: `yt-navigate-finish` for SPA nav, MutationObservers on the frame and on
-`ytd-watch-flexy[theater]`, and a `reassert()` fixpoint that re-removes YouTube's re-stamped
-chat so it can't overlap the panel. Native chat is **stashed and restored, not destroyed**, on
-disable. The toggle is mounted per-channel and the session resets on channel change.
+`ytd-watch-flexy[theater]`, and a `reassert()` fixpoint that keeps the panel mounted and the
+hijack marker set so re-stamped native chat stays hidden and can't overlap the panel. Native
+chat is **hidden in place, not detached**, on enable (`frame[data-cc-hijacked]` → CSS
+`display:none`): the chat is an `<iframe>`, and removing it from the DOM discards its browsing
+context, so a stash-and-restore would reveal a blank frame. The toggle floats over the frame
+while disabled and re-homes into the panel header (beside the gear) while enabled. The toggle is
+mounted per-channel and the session resets on channel change.
 
 Note: emote `<img>`s load under YouTube's page CSP, but this has been verified in-browser to
 work — emotes render, so no `declarativeNetRequest` rule to relax `img-src` is needed.

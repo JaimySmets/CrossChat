@@ -12,6 +12,8 @@ export interface Badge {
   url?: string;
   /** Human-readable title/tooltip when known. */
   title?: string;
+  /** Tenure for cumulative badges (e.g. subscriber months from Twitch `badge-info`). */
+  count?: number;
 }
 
 export type Fragment =
