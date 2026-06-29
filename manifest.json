@@ -5,8 +5,18 @@
   "description": "Replaces YouTube live chat with a Twitch chat panel rendering 7TV, BTTV and FFZ emotes.",
   "homepage_url": "https://github.com/JaimySmets/CrossChat",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAu8t5sHj9jwr8Ax0a3np64WAUbfMesF86I+BLeeXV3Q2eGczlb0KWmitXaYpM5D2iygTwKM4w3A+ObLFtKep2+V3jl0+j+RBod65qL5LnSBA/np1WPqo7m1PN3XHCGxBJ9/+osZNdPkM2pn3kUsOPJWRQ13qIimWBDJBdp/Ef4NHvqsk324hmvpEFOfRJfK5B4l++1Y4xUvRdjAek54VJlqcKgBFTV4UP5nRcAx9P19WIcZFjJxU05RWxseak8agbrdZaUM0D6vNjuim3+fqdWIdnhsE3n2QZ4x4ribi+OyHiX7kAgCEi/QatqAyLXUQpi6XqmLQAKSNxBb54ULjfowIDAQAB",
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
   "action": {
-    "default_title": "Toggle Twitch chat"
+    "default_title": "Toggle Twitch chat",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png"
+    }
   },
   "permissions": ["storage", "identity"],
   "host_permissions": [

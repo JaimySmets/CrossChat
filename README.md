@@ -1,4 +1,4 @@
-# CrossChat
+# <img src="public/icons/icon-48.png" alt="" width="30" height="30" align="top"> CrossChat
 
 CrossChat is a Manifest V3 browser extension that swaps YouTube's live chat for the streamer's
 Twitch chat, rendering native Twitch emotes along with 7TV, BTTV and FFZ. Reading needs no

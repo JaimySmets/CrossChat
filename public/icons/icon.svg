@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <!-- Twitch-purple app tile -->
+  <rect x="0" y="0" width="128" height="128" rx="28" fill="#9146FF"/>
+  <!-- White chat bubble with a tail -->
+  <path fill="#ffffff" d="M26 24h76a10 10 0 0 1 10 10v44a10 10 0 0 1-10 10H58l-22 18v-18h-10a10 10 0 0 1-10-10V34a10 10 0 0 1 10-10z"/>
+  <!-- Red YouTube play triangle -->
+  <path fill="#FF0000" d="M54 41l30 17-30 17z"/>
+</svg>
