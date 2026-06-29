@@ -3,7 +3,17 @@
 // script holds no sockets and no platform tokens. Each connected panel gets a
 // Session that resolves the channel and streams normalized messages back.
 import { onPanelConnect } from "../shared/messaging";
+import { ACTION_TOGGLE } from "../shared/protocol";
 import { Session } from "./engine/engine";
+
+// Toolbar button: the action is owned here, but the enable/disable state lives
+// per-tab in the content-script adapter, so just forward the click to the tab.
+// Tabs without our content script (non-YouTube pages) have no receiver; the
+// rejected promise is expected and swallowed.
+chrome.action.onClicked.addListener((tab) => {
+  if (tab.id == null) return;
+  void chrome.tabs.sendMessage(tab.id, { type: ACTION_TOGGLE }).catch(() => {});
+});
 
 onPanelConnect((port) => {
   const session = new Session(port);

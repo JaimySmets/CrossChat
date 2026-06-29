@@ -12,6 +12,7 @@
 // DOM whenever YouTube mutates the frame — keeps it stable either way.
 import { Panel } from "./panel/panel";
 import { connectToWorker, type PanelPort } from "../shared/messaging";
+import { ACTION_TOGGLE } from "../shared/protocol";
 
 const CHAT_FRAME = "ytd-live-chat-frame";
 const WATCH_FLEXY = "ytd-watch-flexy";
@@ -167,6 +168,15 @@ class CrossChatAdapter {
 
   // --- Enable / disable ---------------------------------------------------
 
+  /** Toolbar action relay: same effect as clicking the in-frame toggle. No-op
+   *  unless a chat frame exists on this page (so the toggle has been mounted);
+   *  enable() itself guards on a resolved frame + handle. */
+  toggleFromAction(): void {
+    if (!this.toggle) return;
+    if (this.enabled) this.disable();
+    else this.enable();
+  }
+
   private enable(): void {
     if (this.enabled || !this.frame || !this.currentHandle) return;
 
@@ -308,4 +318,10 @@ class CrossChatAdapter {
   }
 }
 
-new CrossChatAdapter().start();
+const adapter = new CrossChatAdapter();
+adapter.start();
+
+// Toolbar button click, relayed by the service worker (see service-worker.ts).
+chrome.runtime.onMessage.addListener((msg) => {
+  if (msg?.type === ACTION_TOGGLE) adapter.toggleFromAction();
+});
