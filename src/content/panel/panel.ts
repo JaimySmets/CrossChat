@@ -18,6 +18,7 @@ const MAX_MESSAGES = 250;
 export class Panel {
   readonly root: HTMLElement;
   private header: HTMLElement;
+  private statusIcon: HTMLElement;
   private status: HTMLElement;
   private actions: HTMLElement;
   private list: HTMLElement;
@@ -28,6 +29,7 @@ export class Panel {
   private emoteTipImg: HTMLImageElement;
   private emoteTipName: HTMLElement;
   private emoteTipProvider: HTMLElement;
+  private tip: HTMLElement;
   private autoscroll = true;
 
   private settings: ChatSettings = { ...DEFAULT_SETTINGS };
@@ -40,14 +42,21 @@ export class Panel {
     this.root.className = "cc-root";
 
     // Header: connection status (left) + actions (right): the adapter's
-    // enable/disable toggle and the settings gear sit side by side here.
+    // enable/disable toggle, the change-channel button and the settings gear
+    // sit side by side here. The status pairs an animated icon (spinner →
+    // checkmark, driven purely by CSS off the banner's data-status) with text.
     this.header = document.createElement("div");
     this.header.className = "cc-banner";
+    const statusGroup = document.createElement("div");
+    statusGroup.className = "cc-status-group";
+    this.statusIcon = document.createElement("span");
+    this.statusIcon.className = "cc-status-icon";
     this.status = document.createElement("span");
     this.status.className = "cc-status";
+    statusGroup.append(this.statusIcon, this.status);
     this.actions = document.createElement("div");
     this.actions.className = "cc-actions";
-    this.header.append(this.status, this.actions);
+    this.header.append(statusGroup, this.actions);
 
     this.list = document.createElement("div");
     this.list.className = "cc-messages";
@@ -77,7 +86,29 @@ export class Panel {
     this.emoteTipProvider.className = "cc-emote-tip-provider";
     this.emoteTip.append(this.emoteTipImg, this.emoteTipName, this.emoteTipProvider);
 
-    this.root.append(this.header, this.list, this.mapping, this.emoteTip);
+    // Shared instant tooltip for header icon buttons. We avoid the native
+    // `title` (it's slow to appear and can't be themed); this mirrors the
+    // emote hover card's approach — one repositioned node, pointer-events:none.
+    this.tip = document.createElement("div");
+    this.tip.className = "cc-tip cc-hidden";
+
+    this.root.append(this.header, this.list, this.mapping, this.emoteTip, this.tip);
+
+    // Delegated, zero-delay tooltips for any control with data-cc-tip (header
+    // icon buttons and the settings rows alike).
+    this.root.addEventListener("pointerover", (e) => {
+      const t = (e.target as HTMLElement).closest("[data-cc-tip]") as HTMLElement | null;
+      if (t) this.showTip(t);
+    });
+    this.root.addEventListener("pointerout", (e) => {
+      const t = (e.target as HTMLElement).closest("[data-cc-tip]");
+      if (!t) return;
+      // Ignore moves that stay within the same target (e.g. label → its checkbox)
+      // so the tooltip doesn't flicker.
+      const related = e.relatedTarget as Node | null;
+      if (related && t.contains(related)) return;
+      this.hideTip();
+    });
 
     this.list.addEventListener("scroll", () => {
       const nearBottom =
@@ -117,9 +148,10 @@ export class Panel {
     this.applyTheme();
   }
 
-  /** Mount the adapter's enable/disable toggle into the header, left of the gear. */
+  /** Mount an adapter-owned control into the header. Visual order is set by each
+   *  control's CSS `order`, so insertion order here doesn't matter. */
   mountAction(el: HTMLElement): void {
-    this.actions.insertBefore(el, this.actions.firstChild);
+    this.actions.appendChild(el);
   }
 
   setState(state: ConnectionState): void {
@@ -167,6 +199,52 @@ export class Panel {
     this.emoteTip.classList.add("cc-hidden");
   }
 
+  // --- Icon-button tooltip -------------------------------------------------
+
+  /**
+   * Show the shared tooltip for a control, clamped to the panel. Header icon
+   * buttons get a single-line tip below them; settings rows (inside the popover)
+   * get a wrapping tip to the left of the popover, vertically centered on the
+   * row — falling back to below if the left gutter is too narrow.
+   */
+  private showTip(target: HTMLElement): void {
+    const text = target.getAttribute("data-cc-tip");
+    if (!text) return;
+    const inSettings = !!target.closest(".cc-settings");
+    this.tip.textContent = text;
+    this.tip.classList.toggle("cc-tip--wrap", inSettings);
+    this.tip.classList.remove("cc-hidden");
+
+    const rootRect = this.root.getBoundingClientRect();
+    const r = target.getBoundingClientRect();
+    const tip = this.tip.getBoundingClientRect();
+    const x = r.left - rootRect.left;
+    const y = r.top - rootRect.top;
+
+    if (inSettings) {
+      const left = x - tip.width - 8;
+      if (left >= 4) {
+        const top = Math.max(
+          4,
+          Math.min(y + r.height / 2 - tip.height / 2, rootRect.height - tip.height - 4),
+        );
+        this.tip.style.left = `${left}px`;
+        this.tip.style.top = `${top}px`;
+        return;
+      }
+      // Narrow panel: drop below the row instead.
+    }
+
+    const centerX = x + r.width / 2;
+    const left = Math.max(4, Math.min(centerX - tip.width / 2, rootRect.width - tip.width - 4));
+    this.tip.style.left = `${left}px`;
+    this.tip.style.top = `${r.bottom - rootRect.top + 6}px`;
+  }
+
+  private hideTip(): void {
+    this.tip.classList.add("cc-hidden");
+  }
+
   // --- Settings -----------------------------------------------------------
 
   private mountSettings(): void {
@@ -180,13 +258,17 @@ export class Panel {
 
     gearButton.addEventListener("click", (e) => {
       e.stopPropagation();
+      this.hideTip();
       popover.classList.toggle("cc-hidden");
     });
     // Close on outside click or Esc.
     this.onDocClick = (e) => {
       if (popover.classList.contains("cc-hidden")) return;
       const target = e.target as Node;
-      if (!popover.contains(target) && target !== gearButton) {
+      // Use containment, not identity: the gear's click target is the inner
+      // <svg>/<path>, so `target === gearButton` never holds — without this the
+      // outside-click handler would close, then the gear's toggle re-open it.
+      if (!popover.contains(target) && !gearButton.contains(target)) {
         popover.classList.add("cc-hidden");
       }
     };
@@ -200,9 +282,8 @@ export class Panel {
   /** Write every appearance setting onto the root (CSS does the rest). */
   private applySettings(s: ChatSettings): void {
     this.root.dataset.timestamps = s.showTimestamps ? "1" : "0";
-    this.root.dataset.density = s.density;
     this.root.dataset.altrows = s.alternatingRows ? "1" : "0";
-    this.root.dataset.roles = s.colorRoles ? "1" : "0";
+    this.root.dataset.roles = s.showRoleBadges ? "1" : "0";
     this.root.style.setProperty("--cc-font-size", `${s.fontSize}px`);
     this.root.style.setProperty("--cc-emote-scale", String(s.emoteScale));
     this.applyTheme();
@@ -215,22 +296,36 @@ export class Panel {
     this.root.dataset.theme = dark ? "dark" : "light";
   }
 
-  /** Show the "map this YouTube handle to a Twitch login" prompt. */
-  showMapping(youtubeHandle: string, onSubmit: (twitchLogin: string) => void): void {
+  /**
+   * Show the "map this YouTube handle to a Twitch login" prompt. When
+   * `currentLogin` is given the prompt is in "change channel" mode: the input is
+   * prefilled with (and selects) the current login so it can be edited.
+   */
+  showMapping(
+    youtubeHandle: string,
+    onSubmit: (twitchLogin: string) => void,
+    currentLogin?: string,
+  ): void {
     const prompt = this.mapping.querySelector("p")!;
-    prompt.textContent = `No Twitch channel mapped for @${youtubeHandle}. Enter the Twitch username:`;
+    prompt.textContent = currentLogin
+      ? `Connected to Twitch channel for @${youtubeHandle}. Switch to another Twitch username:`
+      : `No Twitch channel mapped for @${youtubeHandle}. Enter the Twitch username:`;
+    this.mappingButton.textContent = currentLogin ? "Switch" : "Connect";
     this.mapping.classList.remove("cc-hidden");
     const submit = () => {
       const login = this.mappingInput.value.trim().toLowerCase();
-      if (!login) return;
+      if (!login || login === currentLogin) return this.hideMapping();
       onSubmit(login);
       this.hideMapping();
     };
     this.mappingButton.onclick = submit;
     this.mappingInput.onkeydown = (e) => {
       if (e.key === "Enter") submit();
+      else if (e.key === "Escape") this.hideMapping();
     };
+    if (currentLogin) this.mappingInput.value = currentLogin;
     this.mappingInput.focus();
+    this.mappingInput.select();
   }
 
   hideMapping(): void {

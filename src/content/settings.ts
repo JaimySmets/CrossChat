@@ -3,31 +3,33 @@
 // is declared in manifest.json). Settings are global: one set for every channel.
 
 export type ThemeChoice = "auto" | "light" | "dark";
-export type Density = "cozy" | "compact";
+/** Timestamp clock: "auto" follows the browser locale; the others force it. */
+export type ClockFormat = "auto" | "12h" | "24h";
 
 export interface ChatSettings {
   showTimestamps: boolean;
+  /** 12/24-hour timestamps. "auto" derives from the browser locale. */
+  clock: ClockFormat;
   theme: ThemeChoice;
   /** Base font size in px for the message list. */
   fontSize: number;
-  density: Density;
   /** Emote height multiplier applied to the 28px base. */
   emoteScale: number;
   alternatingRows: boolean;
-  /** Role chips (mod/vip/sub/broadcaster) + name tinting derived from badge ids. */
-  colorRoles: boolean;
+  /** Show role badges (mod/vip/sub/broadcaster) — real artwork or fallback chips. */
+  showRoleBadges: boolean;
   /** Case-insensitive whole-word terms that highlight a message line. */
   highlightKeywords: string[];
 }
 
 export const DEFAULT_SETTINGS: ChatSettings = {
   showTimestamps: true,
+  clock: "auto",
   theme: "auto",
   fontSize: 13,
-  density: "cozy",
   emoteScale: 1,
   alternatingRows: false,
-  colorRoles: true,
+  showRoleBadges: true,
   highlightKeywords: [],
 };
 

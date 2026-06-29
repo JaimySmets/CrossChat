@@ -1,7 +1,7 @@
 // Pure DOM rendering for normalized messages (ARCHITECTURE.md §4.3).
 // Operates only on NormalizedMessage — no platform-specific knowledge here.
 import type { Fragment, NormalizedMessage } from "../../shared/types";
-import type { ChatSettings } from "../settings";
+import type { ChatSettings, ClockFormat } from "../settings";
 
 /** Badge ids we surface as lightweight role chips, in chip-display order. */
 const ROLE_LABELS: Record<string, string> = {
@@ -53,8 +53,13 @@ function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function formatTime(ts: number): string {
-  return new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+function formatTime(ts: number, clock: ClockFormat): string {
+  const opts: Intl.DateTimeFormatOptions = { hour: "2-digit", minute: "2-digit" };
+  // "auto" leaves the hour cycle to the browser locale (passed as []); the others
+  // force it regardless of locale.
+  if (clock === "12h") opts.hour12 = true;
+  else if (clock === "24h") opts.hourCycle = "h23";
+  return new Date(ts).toLocaleTimeString([], opts);
 }
 
 /** Build one chat-line element for a normalized message. */
@@ -70,7 +75,7 @@ export function renderMessage(msg: NormalizedMessage, settings: ChatSettings): H
   // Timestamp — always rendered; CSS hides it when timestamps are off.
   const time = document.createElement("span");
   time.className = "cc-time";
-  time.textContent = formatTime(msg.timestamp);
+  time.textContent = formatTime(msg.timestamp, settings.clock);
   line.appendChild(time);
 
   // Badges: prefer real artwork when the registry resolved a URL, otherwise fall

@@ -18,6 +18,14 @@ const WATCH_FLEXY = "ytd-watch-flexy";
 const OWNER_LINK =
   "ytd-video-owner-renderer a.yt-simple-endpoint.style-scope.yt-formatted-string";
 
+// Header icons, sized via CSS. The YouTube glyph keeps its brand red so the
+// "return to native chat" action reads at a glance; the swap arrows mean
+// "change the mapped Twitch channel".
+const YOUTUBE_SVG =
+  '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#f00" d="M21.58 7.19c-.23-.86-.91-1.54-1.77-1.77C18.25 5 12 5 12 5s-6.25 0-7.81.42c-.86.23-1.54.91-1.77 1.77C2 8.75 2 12 2 12s0 3.25.42 4.81c.23.86.91 1.54 1.77 1.77C5.75 19 12 19 12 19s6.25 0 7.81-.42c.86-.23 1.54-.91 1.77-1.77C22 15.25 22 12 22 12s0-3.25-.42-4.81z"/><path fill="#fff" d="M10 15V9l5.2 3z"/></svg>';
+const SWAP_SVG =
+  '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6.99 11 3 15l3.99 4v-3H14v-2H6.99zM21 9l-3.99-4v3H10v2h7.01v3z"/></svg>';
+
 /** Lowercased @handle (preferred) or channel path fallback, used as mapping key. */
 function detectChannelHandle(): string | null {
   const link = document.querySelector<HTMLAnchorElement>(OWNER_LINK);
@@ -55,6 +63,7 @@ class CrossChatAdapter {
   private port: PanelPort | null = null;
   private panel: Panel | null = null;
   private currentHandle: string | null = null;
+  private currentLogin: string | null = null;
   private frame: HTMLElement | null = null;
   private toggle: HTMLButtonElement | null = null;
   private enabled = false;
@@ -116,10 +125,44 @@ class CrossChatAdapter {
 
   private updateToggleLabel(): void {
     if (!this.toggle) return;
-    this.toggle.textContent = this.enabled ? "↩ YouTube chat" : "Enable Twitch chat";
+    if (this.enabled) {
+      // In-header icon button: a YouTube glyph with a custom (instant) tooltip.
+      this.toggle.innerHTML = YOUTUBE_SVG;
+      this.toggle.dataset.ccTip = "Back to YouTube chat";
+      this.toggle.setAttribute("aria-label", "Back to YouTube chat");
+      this.toggle.style.order = "2";
+    } else {
+      // Floating call-to-action over the native chat: text reads clearer here.
+      this.toggle.textContent = "Enable Twitch chat";
+      delete this.toggle.dataset.ccTip;
+      this.toggle.setAttribute("aria-label", "Enable Twitch chat");
+      this.toggle.style.order = "";
+    }
     this.toggle.dataset.on = this.enabled ? "1" : "0";
     // Floating overlay only while disabled; in-header button while enabled.
     this.toggle.dataset.floating = this.enabled ? "0" : "1";
+  }
+
+  /** A header icon button that re-opens the mapping prompt to switch the Twitch
+   *  channel for the current YouTube handle. Created fresh per enable (the panel,
+   *  and thus its header, is rebuilt each time). */
+  private makeChangeChannelButton(): HTMLButtonElement {
+    const btn = document.createElement("button");
+    btn.className = "cc-chan";
+    btn.style.order = "1";
+    btn.dataset.ccTip = "Change Twitch channel";
+    btn.setAttribute("aria-label", "Change Twitch channel");
+    btn.innerHTML = SWAP_SVG;
+    btn.addEventListener("click", () => {
+      if (!this.panel || !this.currentHandle) return;
+      const handle = this.currentHandle;
+      this.panel.showMapping(
+        handle,
+        (twitchLogin) => this.port?.send({ type: "set-mapping", youtubeHandle: handle, twitchLogin }),
+        this.currentLogin ?? undefined,
+      );
+    });
+    return btn;
   }
 
   // --- Enable / disable ---------------------------------------------------
@@ -145,6 +188,7 @@ class CrossChatAdapter {
     // Re-home the toggle from its floating overlay into the panel header, beside
     // the gear, now that a header exists to hold it.
     if (this.toggle) panel.mountAction(this.toggle);
+    panel.mountAction(this.makeChangeChannelButton());
 
     this.ensurePort();
     this.port!.send({ type: "attach", youtubeHandle: this.currentHandle });
@@ -221,6 +265,10 @@ class CrossChatAdapter {
           this.panel.addMessage(msg.message);
           break;
         case "channel-resolved":
+          // Remember the resolved login so the change-channel prompt can prefill
+          // it, and clear any messages from a previously mapped channel.
+          this.currentLogin = msg.channel.login;
+          this.panel.clearMessages();
           this.panel.hideMapping();
           break;
         case "need-mapping":
@@ -245,6 +293,7 @@ class CrossChatAdapter {
     this.toggle = null;
     this.frame = null;
     this.currentHandle = null;
+    this.currentLogin = null;
   }
 }
 

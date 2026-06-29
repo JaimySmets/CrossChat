@@ -65,21 +65,134 @@
   gap: 4px;
 }
 
-.cc-gear {
+/* Shared header icon buttons: settings gear, change-channel swap, and the
+   enabled-state "back to YouTube" toggle. Transparent square buttons that hold
+   a 16px SVG; the active toggle (.cc-toggle[data-floating="0"]) opts in below. */
+.cc-gear,
+.cc-chan {
   flex: 0 0 auto;
   border: 0;
   background: transparent;
-  color: inherit;
-  font-size: 15px;
-  line-height: 1;
-  padding: 2px 4px;
+  color: var(--cc-fg);
+  padding: 3px;
   cursor: pointer;
   opacity: 0.75;
   border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
 }
-.cc-gear:hover {
+.cc-gear:hover,
+.cc-chan:hover {
   opacity: 1;
   background: var(--cc-border);
+}
+.cc-gear svg,
+.cc-chan svg,
+.cc-toggle[data-floating="0"] svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+
+/* Connection status: animated icon (left) + label. The icon is purely
+   CSS-driven off the banner's data-status — spinner while connecting,
+   checkmark once connected, a dot when idle/disconnected, an ✕ on error. */
+.cc-status-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.cc-status-icon {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  box-sizing: border-box;
+  position: relative;
+}
+.cc-banner[data-status="connecting"] .cc-status-icon,
+.cc-banner[data-status="reconnecting"] .cc-status-icon {
+  border: 2px solid var(--cc-border);
+  border-top-color: var(--cc-accent);
+  border-radius: 50%;
+  animation: cc-spin 0.7s linear infinite;
+}
+.cc-banner[data-status="connected"] .cc-status-icon::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 0;
+  width: 3px;
+  height: 7px;
+  border: solid #16a34a;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+  transform-origin: center;
+  animation: cc-check-pop 0.25s ease-out;
+}
+.cc-banner[data-status="idle"] .cc-status-icon,
+.cc-banner[data-status="disconnected"] .cc-status-icon {
+  width: 8px;
+  height: 8px;
+  margin: 2px;
+  border-radius: 50%;
+  background: var(--cc-muted);
+}
+.cc-banner[data-status="error"] .cc-status-icon::before,
+.cc-banner[data-status="error"] .cc-status-icon::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 13px;
+  height: 2px;
+  border-radius: 1px;
+  background: #fff;
+}
+.cc-banner[data-status="error"] .cc-status-icon::before {
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+.cc-banner[data-status="error"] .cc-status-icon::after {
+  transform: translate(-50%, -50%) rotate(-45deg);
+}
+@keyframes cc-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes cc-check-pop {
+  0% {
+    transform: rotate(45deg) scale(0);
+  }
+  60% {
+    transform: rotate(45deg) scale(1.15);
+  }
+  100% {
+    transform: rotate(45deg) scale(1);
+  }
+}
+
+/* Instant, themed tooltip for header icon buttons (positioned by panel.ts). */
+.cc-tip {
+  position: absolute;
+  z-index: 40;
+  pointer-events: none;
+  padding: 3px 7px;
+  font-size: 11px;
+  line-height: 1.3;
+  white-space: nowrap;
+  color: var(--cc-fg);
+  background: var(--cc-bg);
+  border: 1px solid var(--cc-border);
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+/* Multi-line variant for the longer settings descriptions. */
+.cc-tip--wrap {
+  white-space: normal;
+  max-width: 180px;
 }
 
 .cc-messages {
@@ -92,10 +205,6 @@
 
 .cc-msg {
   padding: 2px 4px;
-}
-.cc-root[data-density="compact"] .cc-msg {
-  padding: 1px 4px;
-  line-height: 1.25;
 }
 .cc-root[data-altrows="1"] .cc-msg:nth-child(even) {
   background: var(--cc-altrow);
@@ -143,7 +252,9 @@
   color: #fff;
   background: var(--cc-muted);
 }
-.cc-root:not([data-roles="1"]) .cc-chip {
+/* "Show role badges" off → hide both real badge artwork and the fallback chips. */
+.cc-root:not([data-roles="1"]) .cc-chip,
+.cc-root:not([data-roles="1"]) .cc-badge {
   display: none;
 }
 .cc-chip[data-role="broadcaster"] {
@@ -202,7 +313,7 @@
   top: 34px;
   right: 8px;
   z-index: 20;
-  width: 220px;
+  width: 244px;
   max-width: calc(100% - 16px);
   padding: 10px 12px;
   background: var(--cc-bg);
@@ -228,7 +339,8 @@
   cursor: pointer;
 }
 .cc-set-label {
-  color: var(--cc-muted);
+  color: var(--cc-fg);
+  white-space: nowrap;
 }
 .cc-set-inline {
   display: flex;
@@ -236,7 +348,7 @@
   gap: 6px;
 }
 .cc-set-value {
-  color: var(--cc-muted);
+  color: var(--cc-fg);
   font-variant-numeric: tabular-nums;
   min-width: 30px;
   text-align: right;
@@ -250,13 +362,12 @@
   padding: 3px 6px;
   font: inherit;
 }
-.cc-settings input[type="text"] {
-  flex: 1 1 auto;
-  min-width: 0;
-}
+/* Slider and keyword input share one box width so the two rows line up. */
+.cc-settings input[type="text"],
 .cc-settings input[type="range"] {
-  flex: 1 1 auto;
-  min-width: 0;
+  flex: 0 0 auto;
+  width: 116px;
+  box-sizing: border-box;
 }
 
 /* Emote hover card: large preview + name + provider, à la 7TV/BTTV/FFZ. A single
@@ -305,6 +416,17 @@ ytd-live-chat-frame[data-cc-hijacked="1"] > *:not(.cc-root):not(.cc-toggle) {
   display: none !important;
 }
 
+/* Modern YouTube wraps live chat in a rounded, bordered frame. Our panel paints
+   its own background, so that frame's border/radius/shadow just shows as a stray
+   (light, in dark mode) outline around the panel — strip it while hijacked. */
+ytd-live-chat-frame[data-cc-hijacked="1"] {
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  overflow: hidden;
+}
+
 /* Enable/disable toggle. While CrossChat is OFF it floats over the chat frame's
    top-right corner (data-floating="1"); while ON it's a normal button in the
    panel header beside the gear (data-floating="0"). */
@@ -336,4 +458,22 @@ ytd-live-chat-frame[data-cc-hijacked="1"] > *:not(.cc-root):not(.cc-toggle) {
 }
 .cc-toggle[data-on="1"]:hover {
   background: rgba(0, 0, 0, 0.7);
+}
+
+/* When enabled the toggle lives in the panel header as an icon button — drop the
+   floating overlay's pill styling so it matches the gear and change-channel. */
+.cc-toggle[data-floating="0"] {
+  padding: 3px;
+  background: transparent;
+  border-radius: 4px;
+  opacity: 0.75;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+  box-shadow: none;
+}
+.cc-toggle[data-floating="0"]:hover {
+  background: var(--cc-border);
+  opacity: 1;
 }

@@ -12,10 +12,11 @@ export interface SettingsView {
 
 type OnChange = (patch: Partial<ChatSettings>) => void;
 
-/** Build a labelled row wrapping a control. */
-function row(labelText: string, control: HTMLElement): HTMLElement {
+/** Build a labelled row wrapping a control, with an optional hover tooltip. */
+function row(labelText: string, control: HTMLElement, tip?: string): HTMLElement {
   const r = document.createElement("label");
   r.className = "cc-set-row";
+  if (tip) r.dataset.ccTip = tip;
   const span = document.createElement("span");
   span.className = "cc-set-label";
   span.textContent = labelText;
@@ -23,12 +24,17 @@ function row(labelText: string, control: HTMLElement): HTMLElement {
   return r;
 }
 
+/** Material "settings" gear, sized via CSS (width/height on the svg). */
+const GEAR_SVG =
+  '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.488.488 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>';
+
 export function buildSettingsView(initial: ChatSettings, onChange: OnChange): SettingsView {
   const gearButton = document.createElement("button");
   gearButton.className = "cc-gear";
-  gearButton.title = "Chat settings";
+  gearButton.dataset.ccTip = "Chat settings";
   gearButton.setAttribute("aria-label", "Chat settings");
-  gearButton.textContent = "⚙";
+  gearButton.style.order = "3";
+  gearButton.innerHTML = GEAR_SVG;
 
   const popover = document.createElement("div");
   popover.className = "cc-settings cc-hidden";
@@ -39,6 +45,23 @@ export function buildSettingsView(initial: ChatSettings, onChange: OnChange): Se
   timestamps.checked = initial.showTimestamps;
   timestamps.addEventListener("change", () =>
     onChange({ showTimestamps: timestamps.checked }),
+  );
+
+  // Time format ------------------------------------------------------------
+  const clock = document.createElement("select");
+  for (const [value, label] of [
+    ["auto", "Auto"],
+    ["24h", "24-hour"],
+    ["12h", "12-hour"],
+  ] as const) {
+    const opt = document.createElement("option");
+    opt.value = value;
+    opt.textContent = label;
+    clock.appendChild(opt);
+  }
+  clock.value = initial.clock;
+  clock.addEventListener("change", () =>
+    onChange({ clock: clock.value as ChatSettings["clock"] }),
   );
 
   // Theme ------------------------------------------------------------------
@@ -73,9 +96,11 @@ export function buildSettingsView(initial: ChatSettings, onChange: OnChange): Se
     fontValue.textContent = `${px}px`;
     onChange({ fontSize: px });
   });
+  // Value sits left of the slider so the slider right-aligns with the other
+  // right-side controls (the keyword input, selects).
   const fontWrap = document.createElement("div");
   fontWrap.className = "cc-set-inline";
-  fontWrap.append(fontSize, fontValue);
+  fontWrap.append(fontValue, fontSize);
 
   // Emote size -------------------------------------------------------------
   const emote = document.createElement("select");
@@ -92,14 +117,6 @@ export function buildSettingsView(initial: ChatSettings, onChange: OnChange): Se
   emote.value = String(initial.emoteScale);
   emote.addEventListener("change", () => onChange({ emoteScale: Number(emote.value) }));
 
-  // Density (compact) ------------------------------------------------------
-  const compact = document.createElement("input");
-  compact.type = "checkbox";
-  compact.checked = initial.density === "compact";
-  compact.addEventListener("change", () =>
-    onChange({ density: compact.checked ? "compact" : "cozy" }),
-  );
-
   // Alternating rows -------------------------------------------------------
   const altRows = document.createElement("input");
   altRows.type = "checkbox";
@@ -108,12 +125,12 @@ export function buildSettingsView(initial: ChatSettings, onChange: OnChange): Se
     onChange({ alternatingRows: altRows.checked }),
   );
 
-  // Color roles ------------------------------------------------------------
-  const colorRoles = document.createElement("input");
-  colorRoles.type = "checkbox";
-  colorRoles.checked = initial.colorRoles;
-  colorRoles.addEventListener("change", () =>
-    onChange({ colorRoles: colorRoles.checked }),
+  // Role badges ------------------------------------------------------------
+  const roleBadges = document.createElement("input");
+  roleBadges.type = "checkbox";
+  roleBadges.checked = initial.showRoleBadges;
+  roleBadges.addEventListener("change", () =>
+    onChange({ showRoleBadges: roleBadges.checked }),
   );
 
   // Highlight keywords -----------------------------------------------------
@@ -141,14 +158,30 @@ export function buildSettingsView(initial: ChatSettings, onChange: OnChange): Se
 
   popover.append(
     title,
-    row("Show timestamps", timestamps),
-    row("Theme", theme),
-    row("Font size", fontWrap),
-    row("Emote size", emote),
-    row("Compact mode", compact),
-    row("Alternating rows", altRows),
-    row("Color roles", colorRoles),
-    row("Highlight words", keywords),
+    row("Show timestamps", timestamps, "Show the time each message was sent."),
+    row(
+      "Time format",
+      clock,
+      "12- or 24-hour clock for timestamps. Auto follows your browser's locale.",
+    ),
+    row("Theme", theme, "Light, dark, or match your system theme."),
+    row("Font size", fontWrap, "Text size for chat messages."),
+    row("Emote size", emote, "Display size of emotes within messages."),
+    row(
+      "Alternating rows",
+      altRows,
+      "Tint every other message with a faint background for readability.",
+    ),
+    row(
+      "Show role badges",
+      roleBadges,
+      "Show moderator / VIP / subscriber / broadcaster badges next to usernames.",
+    ),
+    row(
+      "Highlight words",
+      keywords,
+      "Highlight any message containing one of these comma-separated words.",
+    ),
   );
 
   return { gearButton, popover };
