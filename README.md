@@ -1,55 +1,52 @@
 # CrossChat
 
-A Manifest V3 browser extension that replaces YouTube's live chat with a self-rendered
-panel sourced from **Twitch**, rendering native Twitch emotes **plus 7TV, BTTV and FFZ**
-(global + per-channel) — the third-party emotes that the old iframe-embed approach can't
-show. See [`ARCHITECTURE.md`](./ARCHITECTURE.md) for the full design.
+CrossChat is a Manifest V3 browser extension that swaps YouTube's live chat for the streamer's
+Twitch chat, rendering native Twitch emotes along with 7TV, BTTV and FFZ. Reading needs no
+account; logging into Twitch lets you send messages too.
 
-## MVP status
+See [`ARCHITECTURE.md`](./ARCHITECTURE.md) for the design and [`CLAUDE.md`](./CLAUDE.md) for a
+map of the code.
 
-Read-only, **no OAuth** (anonymous Twitch IRC read). Implemented:
+## Features
 
-- YouTube DOM adapter: channel detection and an **Enable Twitch chat** toggle overlaid on
-  `ytd-live-chat-frame`. CrossChat stays off until you click it (so you can arrange theatre
-  mode first); enabling hides — not destroys — YouTube's native chat so it can be restored.
-  The panel is dark-mode themed, re-asserts itself across theatre toggles, and resets per
-  channel on SPA navigation.
-- Twitch read via anonymous IRC-over-WebSocket, owned by the service worker, behind the
-  `ChatSource` interface (so EventSub can replace it later without touching the UI).
-- Emote Registry: 7TV/BTTV/FFZ global + per-channel sets merged with a precedence rule
-  (channel > global; provider order 7TV > BTTV > FFZ), applied as a case-sensitive
-  whole-word pass over message text. Twitch user id is resolved with no auth via the FFZ
-  room endpoint.
-- YouTube→Twitch handle mapping persisted in `chrome.storage.local`, prompted in-panel.
-
-**Deferred (post-MVP, already interface-ready):** OAuth, EventSub read, sending
-(`ChatSink` + Helix), Kick, YouTube-as-target.
+- Reads a Twitch channel's chat inside YouTube, in place of the native chat.
+- Renders real emotes: native Twitch plus 7TV, BTTV and FFZ, both global and per-channel.
+- Reading is anonymous, no login required.
+- Optional Twitch login to send messages.
+- Remembers which Twitch channel maps to each YouTube channel.
+- Themeable, configurable panel that survives theatre mode and in-app navigation.
 
 ## Develop
 
 ```bash
 npm install
-npm run dev      # vite dev server + HMR (keep running)
-# or
-npm run build    # tsc --noEmit && vite build  -> dist/
+npm run dev        # vite dev server + HMR
+npm run build      # typecheck + build to dist/
+npm run typecheck  # typecheck only
 ```
 
-Load `dist/` (after `npm run build`) or the dev build at `chrome://extensions` →
-Developer mode → **Load unpacked**.
+There is no test suite or linter; `tsc` (strict) is the only static gate, so keep the build
+clean. Verification is manual: build, load it, and exercise it on a live stream.
 
-## Try it
+## How it works
 
-1. Open a YouTube **live** stream (a live-chat panel must exist on the page).
-2. Arrange your layout (e.g. theatre mode), then click **Enable Twitch chat** in the chat
-   panel's top-right corner.
-3. When prompted, enter the Twitch username to read from for that channel.
-4. Messages stream into the panel with names, colors, and Twitch + 7TV/BTTV/FFZ emotes.
-   Click **↩ YouTube chat** to switch back at any time.
-5. Navigate to another stream without reloading → the toggle resets; enable it again there.
+Two execution contexts talk over one typed `chrome.runtime` port. The content script renders the
+panel and forwards what you type; it holds no sockets and no tokens. The service worker owns the
+connections and your Twitch identity, running one session per panel that resolves the channel,
+streams messages in through a `ChatSource`, composites emotes, and sends through a `ChatSink`
+when you are logged in.
 
-## Content-Security-Policy note
+These source and sink boundaries are deliberate: adding a platform should mean a new module, not
+changes to the engine or panel.
 
-Emote images are injected as `<img>` into the YouTube document, so they load under
-**YouTube's page Content-Security-Policy**. This has been verified in-browser: emotes from
-all CDNs (`cdn.7tv.app`, `cdn.betterttv.net`, `cdn.frankerfacez.com`, `static-cdn.jtvnw.net`)
-render fine, so no `declarativeNetRequest` rule to relax `img-src` is needed.
+## Privacy
+
+CrossChat has no backend and no analytics. It talks only to Twitch and the emote providers from
+your browser. Your Twitch token, channel mappings and settings stay in `chrome.storage.local` on
+your machine.
+
+## Contributing
+
+Issues and pull requests are welcome. Keep the build clean and respect the source/sink
+boundaries above. The Twitch and emote-provider APIs change often, so verify request shapes
+against current docs when working on those paths.
