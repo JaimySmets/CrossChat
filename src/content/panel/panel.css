@@ -307,6 +307,77 @@
   cursor: default;
 }
 
+/* Composer — the opt-in send path, pinned below the message list. The login
+   CTA and the send input are mutually exclusive, toggled off `data-auth`. */
+.cc-composer {
+  flex: 0 0 auto;
+  padding: 8px;
+  border-top: 1px solid var(--cc-border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.cc-composer[data-auth="out"] .cc-send-row,
+.cc-composer[data-auth="out"] .cc-send-meta {
+  display: none;
+}
+.cc-composer[data-auth="in"] .cc-login {
+  display: none;
+}
+.cc-login {
+  width: 100%;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 4px;
+  background: #9147ff; /* Twitch purple */
+  color: #fff;
+  cursor: pointer;
+  font-weight: 600;
+}
+.cc-send-row {
+  display: flex;
+  gap: 6px;
+}
+.cc-send-input {
+  flex: 1 1 auto;
+  padding: 6px 8px;
+  border: 1px solid var(--cc-border);
+  border-radius: 4px;
+  background: var(--cc-bg);
+  color: var(--cc-fg);
+}
+.cc-send-btn {
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 4px;
+  background: var(--cc-accent);
+  color: #fff;
+  cursor: pointer;
+}
+.cc-send-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.cc-send-error {
+  color: #e0245e;
+  font-size: 12px;
+}
+.cc-send-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--cc-muted);
+  font-size: 11px;
+}
+.cc-logout {
+  border: 0;
+  background: none;
+  color: var(--cc-accent);
+  cursor: pointer;
+  padding: 0;
+  font-size: 11px;
+}
+
 /* Settings popover, anchored under the gear in the header's top-right. */
 .cc-settings {
   position: absolute;

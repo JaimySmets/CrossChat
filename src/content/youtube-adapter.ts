@@ -176,7 +176,11 @@ class CrossChatAdapter {
     // (see panel.css) keeps the iframe's document alive while it's hidden.
     this.frame.dataset.ccHijacked = "1";
 
-    const panel = new Panel();
+    const panel = new Panel({
+      onSend: (text) => this.port?.send({ type: "send", text }),
+      onLogin: () => this.port?.send({ type: "login" }),
+      onLogout: () => this.port?.send({ type: "logout" }),
+    });
     panel.setSystemDark(this.darkQuery.matches);
     void panel.init();
     this.panel = panel;
@@ -275,6 +279,12 @@ class CrossChatAdapter {
           this.panel.showMapping(msg.youtubeHandle, (twitchLogin) =>
             port.send({ type: "set-mapping", youtubeHandle: msg.youtubeHandle, twitchLogin }),
           );
+          break;
+        case "auth":
+          this.panel.setAuth(msg.auth);
+          break;
+        case "send-result":
+          this.panel.sendResult(msg.ok, msg.error);
           break;
       }
     });

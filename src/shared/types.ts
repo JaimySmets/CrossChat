@@ -66,3 +66,12 @@ export interface ChatSink {
   send(channel: ResolvedChannel, text: string): Promise<SendResult>;
   capabilities(): { canSend: boolean; rateLimitHint?: number };
 }
+
+/**
+ * Authentication state for the (opt-in) send path. The read path is anonymous,
+ * so a logged-out user sees the full read-only experience; logging in unlocks
+ * the composer. The panel only needs the display identity to label the UI.
+ */
+export type AuthState =
+  | { loggedIn: false }
+  | { loggedIn: true; login: string; displayName: string };

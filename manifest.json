@@ -3,7 +3,8 @@
   "name": "CrossChat",
   "version": "0.0.1",
   "description": "Replaces YouTube live chat with a Twitch chat panel rendering 7TV, BTTV and FFZ emotes.",
-  "permissions": ["storage"],
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAu8t5sHj9jwr8Ax0a3np64WAUbfMesF86I+BLeeXV3Q2eGczlb0KWmitXaYpM5D2iygTwKM4w3A+ObLFtKep2+V3jl0+j+RBod65qL5LnSBA/np1WPqo7m1PN3XHCGxBJ9/+osZNdPkM2pn3kUsOPJWRQ13qIimWBDJBdp/Ef4NHvqsk324hmvpEFOfRJfK5B4l++1Y4xUvRdjAek54VJlqcKgBFTV4UP5nRcAx9P19WIcZFjJxU05RWxseak8agbrdZaUM0D6vNjuim3+fqdWIdnhsE3n2QZ4x4ribi+OyHiX7kAgCEi/QatqAyLXUQpi6XqmLQAKSNxBb54ULjfowIDAQAB",
+  "permissions": ["storage", "identity"],
   "host_permissions": [
     "*://*.youtube.com/*",
     "*://*.twitch.tv/*",

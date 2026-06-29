@@ -1,7 +1,7 @@
 // The CrossChat panel UI (ARCHITECTURE.md §3, §7). Vanilla TS, no framework.
 // Owns its DOM subtree; the adapter mounts/sizes it and feeds it data.
 import "./panel.css";
-import type { ConnectionState, NormalizedMessage } from "../../shared/types";
+import type { AuthState, ConnectionState, NormalizedMessage } from "../../shared/types";
 import {
   DEFAULT_SETTINGS,
   loadSettings,
@@ -15,6 +15,13 @@ import { buildSettingsView } from "./settings-view";
 /** Keep the DOM bounded for long sessions (Phase 4 concern, cheap to do now). */
 const MAX_MESSAGES = 250;
 
+/** Outbound actions the panel forwards to the adapter (which owns the port). */
+export interface PanelHandlers {
+  onSend(text: string): void;
+  onLogin(): void;
+  onLogout(): void;
+}
+
 export class Panel {
   readonly root: HTMLElement;
   private header: HTMLElement;
@@ -25,6 +32,13 @@ export class Panel {
   private mapping: HTMLElement;
   private mappingInput: HTMLInputElement;
   private mappingButton: HTMLButtonElement;
+  private composer: HTMLElement;
+  private loginButton: HTMLButtonElement;
+  private sendInput: HTMLInputElement;
+  private sendButton: HTMLButtonElement;
+  private sendAs: HTMLElement;
+  private logoutButton: HTMLButtonElement;
+  private sendError: HTMLElement;
   private emoteTip: HTMLElement;
   private emoteTipImg: HTMLImageElement;
   private emoteTipName: HTMLElement;
@@ -37,7 +51,7 @@ export class Panel {
   private unsubscribeSettings: (() => void) | null = null;
   private onDocClick: ((e: MouseEvent) => void) | null = null;
 
-  constructor() {
+  constructor(private readonly handlers?: PanelHandlers) {
     this.root = document.createElement("div");
     this.root.className = "cc-root";
 
@@ -75,6 +89,60 @@ export class Panel {
     row.append(this.mappingInput, this.mappingButton);
     this.mapping.append(prompt, row);
 
+    // Composer: the opt-in send path. Hidden until we know the auth state. When
+    // logged out it shows a single "Log in with Twitch" call-to-action; when
+    // logged in it swaps to the message input + "Sending as <name>" footer. CSS
+    // shows/hides the two halves off the `data-auth` attribute.
+    this.composer = document.createElement("div");
+    this.composer.className = "cc-composer cc-hidden";
+    this.composer.dataset.auth = "out";
+
+    this.loginButton = document.createElement("button");
+    this.loginButton.className = "cc-login";
+    this.loginButton.textContent = "Log in to Twitch to chat";
+    this.loginButton.addEventListener("click", () => this.handlers?.onLogin());
+
+    const sendRow = document.createElement("div");
+    sendRow.className = "cc-send-row";
+    this.sendInput = document.createElement("input");
+    this.sendInput.className = "cc-send-input";
+    this.sendInput.placeholder = "Send a message";
+    this.sendInput.autocapitalize = "off";
+    this.sendInput.maxLength = 500; // Twitch chat message cap
+    this.sendButton = document.createElement("button");
+    this.sendButton.className = "cc-send-btn";
+    this.sendButton.textContent = "Chat";
+    sendRow.append(this.sendInput, this.sendButton);
+
+    this.sendError = document.createElement("div");
+    this.sendError.className = "cc-send-error cc-hidden";
+
+    const meta = document.createElement("div");
+    meta.className = "cc-send-meta";
+    this.sendAs = document.createElement("span");
+    this.sendAs.className = "cc-send-as";
+    this.logoutButton = document.createElement("button");
+    this.logoutButton.className = "cc-logout";
+    this.logoutButton.textContent = "Log out";
+    this.logoutButton.addEventListener("click", () => this.handlers?.onLogout());
+    meta.append(this.sendAs, this.logoutButton);
+
+    this.composer.append(this.loginButton, sendRow, this.sendError, meta);
+
+    const submitSend = () => {
+      const text = this.sendInput.value.trim();
+      if (!text) return;
+      this.handlers?.onSend(text);
+      this.sendButton.disabled = true; // re-enabled on send-result
+    };
+    this.sendButton.addEventListener("click", submitSend);
+    this.sendInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        submitSend();
+      }
+    });
+
     // Emote hover card: a single shared preview (large emote + name + provider),
     // positioned on demand. pointer-events:none in CSS so it never steals hover.
     this.emoteTip = document.createElement("div");
@@ -92,7 +160,19 @@ export class Panel {
     this.tip = document.createElement("div");
     this.tip.className = "cc-tip cc-hidden";
 
-    this.root.append(this.header, this.list, this.mapping, this.emoteTip, this.tip);
+    this.root.append(this.header, this.list, this.mapping, this.composer, this.emoteTip, this.tip);
+
+    // Keep keystrokes typed into our inputs from bubbling to the page. YouTube
+    // and other extensions bind global single-key shortcuts on document (e.g. a
+    // theatre-mode extension toggling on "t"); without this, typing "t" in the
+    // chat or settings inputs would fire them. One delegated handler covers every
+    // input in the panel (send box, channel mapping, settings keyword field).
+    for (const type of ["keydown", "keyup", "keypress"] as const) {
+      this.root.addEventListener(type, (e) => {
+        const tag = (e.target as HTMLElement | null)?.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA") e.stopPropagation();
+      });
+    }
 
     // Delegated, zero-delay tooltips for any control with data-cc-tip (header
     // icon buttons and the settings rows alike).
@@ -170,6 +250,39 @@ export class Panel {
   clearMessages(): void {
     this.list.replaceChildren();
     this.autoscroll = true;
+  }
+
+  // --- Composer / auth ----------------------------------------------------
+
+  /** Reveal the composer and switch between the login CTA and the send input. */
+  setAuth(auth: AuthState): void {
+    this.composer.classList.remove("cc-hidden");
+    this.composer.dataset.auth = auth.loggedIn ? "in" : "out";
+    this.hideSendError();
+    if (auth.loggedIn) {
+      this.sendAs.textContent = `Sending as ${auth.displayName}`;
+      this.sendButton.disabled = false;
+    } else {
+      this.sendInput.value = "";
+    }
+  }
+
+  /** Apply the outcome of a send: clear on success, surface the error otherwise. */
+  sendResult(ok: boolean, error?: string): void {
+    this.sendButton.disabled = false;
+    if (ok) {
+      this.sendInput.value = "";
+      this.hideSendError();
+      this.sendInput.focus();
+    } else {
+      this.sendError.textContent = error || "Send failed";
+      this.sendError.classList.remove("cc-hidden");
+    }
+  }
+
+  private hideSendError(): void {
+    this.sendError.textContent = "";
+    this.sendError.classList.add("cc-hidden");
   }
 
   // --- Emote hover card ---------------------------------------------------

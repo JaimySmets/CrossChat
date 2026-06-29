@@ -18,6 +18,15 @@ onPanelConnect((port) => {
       case "detach":
         session.detach();
         break;
+      case "login":
+        void session.login();
+        break;
+      case "logout":
+        void session.logout();
+        break;
+      case "send":
+        void session.send(msg.text);
+        break;
     }
   });
   port.onDisconnect(() => session.detach());
