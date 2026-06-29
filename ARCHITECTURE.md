@@ -5,8 +5,10 @@
 > with full third-party emote support (7TV, BTTV, FFZ) so the viewing experience matches what
 > native Twitch/Kick users see.
 
-**Status:** Pre-implementation design. Intended as the seed reference for a Claude Code build.
-**Last updated:** 2026-06-14
+**Status:** Implemented for Twitch — anonymous read, 7TV/BTTV/FFZ emotes, and authenticated
+send. Kick and YouTube-as-target are deferred but interface-ready. This document describes the
+architecture as built and is the reference for how the application is structured.
+**Last updated:** 2026-06-29
 
 ---
 
@@ -48,8 +50,8 @@ message rendering and can therefore composite in third-party emotes ourselves.
 |---|---|
 | Render our own chat panel instead of embedding an iframe | The iframe is the root cause of the emote gap. Self-rendering is the only way to composite 7TV/BTTV/FFZ. |
 | Source/Sink abstraction from day one | Lets Twitch be v1 while keeping Kick (and a YouTube *target*) addable without rewrites. Designing against the *shape* of two APIs keeps the abstraction from being secretly Twitch-shaped. |
-| All-EventSub for Twitch (read + send via Helix) | We need an OAuth token to send anyway, so anonymous IRC reads buy nothing. EventSub gives cleaner structured JSON than IRC and is Twitch's recommended path. One connection style to maintain. |
-| OAuth token + WebSocket owned by the background service worker | Content scripts are the wrong place for a long-lived authenticated socket. The worker owns connection lifecycle and tokens; the content script is a thin renderer. |
+| Anonymous IRC for read, OAuth only for send | Reading should need no account — most viewers lurk. Anonymous IRC-over-WebSocket delivers full chat with zero auth, so the login cost falls only on users who actually want to talk. Behind the `ChatSource`/`ChatSink` interfaces, an authenticated EventSub read can replace IRC later without touching the UI. |
+| Sockets and tokens owned by the background service worker | Content scripts are the wrong place for a long-lived socket or an access token. The worker owns connection lifecycle, identity and tokens; the content script is a thin renderer. |
 | Twitch first, Kick second, YouTube-source last/never | Ranked purely by integration friendliness. Twitch wants to be read; Kick has an official API; YouTube read is polling + quota-capped and doesn't scale to a published extension. |
 | Markdown design doc in-repo | Versioned with code, directly readable by Claude Code. |
 
@@ -79,7 +81,7 @@ message rendering and can therefore composite in third-party emotes ourselves.
 │  │ Auth Manager │   │  Chat Engine     │   │ Emote Registry      │  │
 │  │ - OAuth flow │   │  (Source/Sink)   │   │ - Twitch native     │  │
 │  │ - token store│──▶│  - TwitchSource  │◀──│ - 7TV  (global+chan)│  │
-│  │ - refresh    │   │  - TwitchSink    │   │ - BTTV (global+chan)│  │
+│  │ - implicit   │   │  - TwitchSink    │   │ - BTTV (global+chan)│  │
 │  └──────────────┘   │  - [KickSource]  │   │ - FFZ  (global+chan)│  │
 │                     │  - [KickSink]    │   │ merged name→img map │  │
 │                     └─────────────────┘   └─────────────────────┘  │
@@ -146,7 +148,7 @@ since those are client-side overlays not present in the wire payload.
 interface ResolvedChannel {
   platform: string;
   login: string;        // e.g. twitch username
-  userId: string;       // numeric/string platform ID — needed for emote sets + EventSub
+  userId: string;       // numeric/string platform ID — needed for emote sets (and send/EventSub)
   displayName?: string;
 }
 ```
@@ -158,15 +160,18 @@ interface ResolvedChannel {
 The differentiator. Builds a merged `name → emote` lookup per channel.
 
 ### Sources of emotes
-1. **Twitch native** — already identified in the EventSub message payload; the source emits
-   them as `emote` fragments directly. No registry lookup needed.
+1. **Twitch native** — already identified in the wire payload (the IRCv3 `emotes` tag today, the
+   EventSub payload later); the source emits them as `emote` fragments directly. No registry
+   lookup needed.
 2. **7TV** — global set + per-channel set (keyed by the platform user ID). First-class Kick
    support too, which is a point in Kick's favor later.
 3. **BTTV** — global + per-channel.
 4. **FFZ** — global + per-channel.
 
 ### Build process (per channel connect)
-1. Resolve `userId` for the channel (Twitch Helix `/users`, Kick equivalent later).
+1. Resolve `userId` for the channel with no auth via FFZ's room endpoint (Helix `/users` is used
+   only on the send path, where a token is available). An empty `userId` still allows IRC read;
+   only the per-channel emote sets fail to load.
 2. Fetch global sets for 7TV / BTTV / FFZ (cacheable across channels, refresh periodically).
 3. Fetch per-channel sets for each provider using `userId`.
 4. Merge into one `Map<emoteName, {url, provider}>`. Define precedence on name collisions
@@ -190,25 +195,35 @@ Emotes are whole-word matches — do not substitute inside larger words.
 
 ## 6. Platform Modules
 
-### 6.1 Twitch (v1 — full read + send)
-- **Auth:** Registered Twitch application (dev console) → Client-Id. User OAuth (PKCE flow
-  suited to an extension) producing a User Access Token.
-  - Scopes: `user:read:chat` (read via EventSub), `user:write:chat` (send).
-- **Read:** EventSub WebSocket, subscribe to `channel.chat.message`. Structured payload with
-  author, badges, and message fragments (incl. native emotes).
-- **Send:** `POST https://api.twitch.tv/helix/chat/messages` with `broadcaster_id`,
-  `sender_id`, `message`. Emotes are sent as their case-sensitive names in plain text — there
-  is no special emote payload. This is *why* sending "just works": every platform's
-  client-side emote extension beautifies the same plain words on the receiving end.
-- **ID resolution:** Helix `/users?login=` → numeric user ID, used for both EventSub and
-  emote-set fetches.
-- **Token lifecycle:** access tokens expire; implement refresh. This is the single most
-  fiddly part of the project — budget for it accordingly.
+### 6.1 Twitch (anonymous read + authenticated send)
+- **Read (no auth):** anonymous IRC-over-WebSocket — connect as `justinfan<random>`, JOIN the
+  channel, and parse tagged PRIVMSGs into `NormalizedMessage`, splitting native Twitch emotes out
+  of the IRCv3 `emotes` tag. Sits behind `ChatSource`, so an authenticated EventSub read can
+  replace it later without touching the UI. The socket lives in the service worker (MV3 keeps the
+  worker alive while a WebSocket is open).
+- **Auth (send only):** a registered Twitch application (public client) → Client-Id, plus a user
+  access token obtained via the **implicit grant** through `chrome.identity.launchWebAuthFlow`.
+  Twitch does not offer auth-code + PKCE for public clients (its token exchange requires a client
+  secret, which an extension cannot ship), so implicit is the only no-secret browser path. Scope:
+  `user:write:chat` only. Reading needs no token, so logged-out users keep the full read path.
+- **Send:** `POST https://api.twitch.tv/helix/chat/messages` with `broadcaster_id`, `sender_id`
+  (the logged-in user) and `message`. Emotes are sent as their case-sensitive names in plain
+  text — there is no special emote payload. This is *why* sending "just works": every platform's
+  client-side emote extension beautifies the same plain words on the receiving end. Sent messages
+  echo back through the IRC read path and render like any other.
+- **ID resolution:** the channel `userId` comes from FFZ's room endpoint (no auth). On send, the
+  numeric `broadcaster_id` is resolved/confirmed via Helix `/users?login=` using the user token.
+- **Badges:** real artwork is resolved via anonymous Twitch GraphQL (public web Client-Id, no
+  secret); on a miss the panel falls back to CSS role chips.
+- **Token lifecycle:** the implicit grant issues no refresh token. The stored token is checked
+  against `/oauth2/validate`; on expiry or a 401 from Helix it is dropped and the panel prompts a
+  fresh login. Device Code Flow is the no-secret, refresh-capable alternative if silent renewal
+  later proves worth its clunkier "enter a code" UX.
 
-> NOTE for the implementer: verify the *current* EventSub subscription shape, transport
-> handshake (session welcome → subscribe via Helix with the session id), and required scopes
-> against dev.twitch.tv at implementation time. Twitch has been actively moving chat off IRC
-> toward EventSub + Helix; do not build on IRC chat commands (deprecated).
+> NOTE for the implementer: the anonymous IRC read, FFZ-based user-id resolution and anonymous
+> GraphQL badges are deliberate no-auth shortcuts; verify their (undocumented, churn-prone) shapes
+> against current behavior when touching them. They sit behind the source/sink/registry interfaces
+> so an official EventSub/Helix read can drop in later without reworking the engine or panel.
 
 ### 6.2 Kick (deferred — second platform)
 - Official public API, OAuth 2.1. App registered at Kick developer settings → client id/secret.
@@ -269,11 +284,13 @@ crosschat/
 └── README.md
 ```
 
-### Permissions (anticipated)
-- `storage` — username mapping, token cache, emote cache.
-- Host permissions for `*.youtube.com` (content script), plus the API/socket origins for
-  Twitch (and later Kick) and the emote provider CDNs.
-- An OAuth redirect surface for the extension (e.g. `chrome.identity` launchWebAuthFlow).
+### Permissions
+- `storage` — username mapping, token, emote cache.
+- `identity` — `chrome.identity.launchWebAuthFlow` for the OAuth redirect (send login).
+- Host permissions for `*.youtube.com` (content script), `*.twitch.tv` (IRC, Helix, id/gql) and
+  the emote provider origins/CDNs.
+- A pinned manifest `key` fixes the extension ID so the registered OAuth redirect URL stays
+  valid across reloads (the Web Store reassigns it on publish).
 
 ---
 
@@ -281,25 +298,28 @@ crosschat/
 
 **Inbound (read + render):**
 1. Adapter detects channel handle → asks worker to resolve source channel.
-2. Worker maps YouTube handle → Twitch login (storage/prompt), resolves `userId`.
+2. Worker maps YouTube handle → Twitch login (storage/prompt), resolves `userId` via FFZ.
 3. Worker builds Emote Registry for the channel (cached where possible).
-4. Worker connects `TwitchSource` (EventSub), subscribes to `channel.chat.message`.
-5. On each event: source emits `NormalizedMessage` with native-emote fragments split out.
+4. Worker connects `TwitchSource` (anonymous IRC) and JOINs the channel.
+5. On each PRIVMSG: source emits `NormalizedMessage` with native-emote fragments split out.
 6. Emote Registry second pass substitutes 7TV/BTTV/FFZ tokens in text fragments.
 7. Worker pushes render-ready message to the panel; panel appends to the list.
 
 **Outbound (send):**
-1. User types in panel input (with emote autocomplete/picker over the registry).
+1. User types in the panel composer (plain text today; an emote picker/autocomplete over the
+   registry is a future addition).
 2. Panel sends raw text to worker.
 3. Worker calls `TwitchSink.send()` → Helix `POST /chat/messages` with the user's token.
-4. Message echoes back through the normal inbound EventSub path and renders like any other.
+4. Message echoes back through the inbound IRC read path and renders like any other.
 
 ---
 
 ## 10. Risks & Open Questions
 
-- **OAuth lifecycle** is the heaviest single piece. Token expiry/refresh, and the extension
-  redirect flow, need care. ~half the total effort lives here.
+- **OAuth lifecycle.** The implicit grant keeps this light (no refresh tokens, no client
+  secret), but the redirect flow and re-login on expiry still need care, and the registered
+  redirect URL is tied to the extension ID (pinned via a manifest `key` for dev; reassigned by
+  the Chrome Web Store on publish).
 - **API churn:** verify Twitch EventSub shapes/scopes and all three emote providers' endpoints
   at build time; verify Kick's API when that module starts.
 - **Platform ToS:** because this is published (not a personal script), read each platform's
@@ -318,23 +338,27 @@ crosschat/
 
 ---
 
-## 11. Suggested Build Order (for the skeleton)
+## 11. Build Order
+
+The order the layers were built (and the order a fresh platform should follow):
 
 1. **MV3 skeleton + YouTube DOM Adapter:** detect channel, inject an empty panel, sync height
    and dark mode, handle SPA navigation. (Pure front-end, no auth — fastest path to "it's on
    the page".)
-2. **Twitch read, unauthenticated proof:** stand up the `ChatSource` interface and a Twitch
-   source; get messages rendering as plain text first.
-   - (If a no-auth read shortcut is convenient for early bring-up, fine for a throwaway spike,
-     but the real path is EventSub which needs the token from step 4 — don't over-invest in a
-     temporary IRC read.)
+2. **Twitch read (anonymous):** stand up the `ChatSource` interface and the anonymous IRC source;
+   get messages rendering as plain text first. This is kept as the read path, not a throwaway —
+   login-free reading is a goal (§2), and the interface lets an EventSub read replace it later.
 3. **Emote Registry:** add 7TV/BTTV/FFZ fetch + merge + the per-message substitution pass.
    This is the payoff milestone — emotes start rendering.
-4. **OAuth (Auth Manager):** Twitch app registration, PKCE flow, token storage + refresh.
-5. **EventSub read (authenticated) + Send (Sink):** switch reads to EventSub, add the input
-   box and Helix send, with emote autocomplete over the registry.
+4. **OAuth (Auth Manager):** Twitch app registration (public client), implicit-grant flow via
+   `chrome.identity`, token storage + validation. No refresh token, no client secret.
+5. **Send (Sink):** add the composer and `TwitchSink` over Helix `POST /chat/messages`; reads
+   stay on IRC and sent messages echo back through it.
 6. **Polish:** username mapping/persistence, reconnection, caching TTLs, error states.
 7. **(Later) Kick module:** second source/sink against the same interfaces.
+
+Future additions behind the existing interfaces: authenticated EventSub read, an emote
+picker/autocomplete in the composer, and a YouTube *send* target.
 
 Implement behind the Source/Sink/Registry interfaces throughout so that step 7 — and any
 future YouTube *target* — is additive rather than invasive.

@@ -32,11 +32,12 @@ owns all connections, identity resolution, and emote compositing.
   for the `Panel` (`panel/`). The worker pushes render-ready `NormalizedMessage`s back.
 - **Service worker** (`src/background/`): `service-worker.ts` is the entry; it spawns one
   `engine/engine.ts` `Session` per connected panel. The Session resolves the channel, builds
-  the emote registry, drives a `ChatSource`, and applies the registry to each message in `emit`.
+  the emote registry, drives a `ChatSource` (anonymous IRC), applies the registry in `emit`, and
+  on login sends through a `ChatSink` (`sinks/`); OAuth identity is owned by `auth/`.
 - **Shared contract** (`src/shared/`): `protocol.ts` defines the `PanelToWorker` /
   `WorkerToPanel` message union and `PORT_NAME`; `messaging.ts` wraps the port for both ends;
   `types.ts` holds the platform-agnostic types (`NormalizedMessage`, `Fragment`, `ChatSource`,
-  `ResolvedChannel`).
+  `ChatSink`, `SendResult`, `ResolvedChannel`, `AuthState`).
 
 ### Two-pass emote rendering (the core design)
 
@@ -55,25 +56,33 @@ The `ChatSource`/`ChatSink` interfaces and `NormalizedMessage` exist so Twitch c
 joined by Kick (and a YouTube *send* target) without touching the UI or registry. Honor these
 boundaries: a new platform is a new source/sink module, not changes to the engine or panel.
 
-## MVP vs. the design doc — important
+## Implementation notes — no-auth shortcuts & what's unbuilt
 
-`ARCHITECTURE.md` is the full intended design and describes the *eventual* Twitch path
-(EventSub + OAuth + Helix send). **The current code deliberately diverges** for a read-only,
-no-auth MVP:
+`ARCHITECTURE.md` describes the architecture as built. A few Twitch paths are deliberate no-auth
+shortcuts, isolated behind interfaces so the official equivalents can replace them later:
 
 - Read is **anonymous Twitch IRC-over-WebSocket** (`sources/twitch-irc-source.ts`), not EventSub.
+  This is the kept read path (login-free reading is a goal), not a throwaway — but the
+  `ChatSource` seam lets an authenticated EventSub read drop in later.
 - Twitch user id is resolved with **no auth via FFZ's room endpoint** (`engine/resolve.ts` →
   `emotes/ffz.ts`), not Helix `/users`. If FFZ has no record, `userId` is empty but IRC read
-  still works (channel-specific emotes just won't load).
+  still works (channel-specific emotes just won't load). On send, `broadcaster_id` is
+  resolved/confirmed via Helix `/users?login=` with the user token.
 - Badges are resolved to real artwork via **anonymous Twitch GraphQL** (`badges/twitch-badges.ts`,
-  public web Client-Id, no secret), not Helix `/chat/badges`. It's layered behind a `getUserToken()`
-  seam so the official Helix path drops in once OAuth exists; on any miss/failure `render.ts` falls
-  back to the CSS role chips. Like IRC/FFZ, the gql endpoint is an undocumented no-auth spike.
-- **No OAuth, no `ChatSink`, no sending, no Kick** yet — these are interface-ready but unbuilt.
+  public web Client-Id, no secret), not Helix `/chat/badges`; on any miss/failure `render.ts`
+  falls back to CSS role chips. The `getUserToken()` seam there still returns null — wiring badges
+  to Helix now that a user token exists is an open follow-up. The gql endpoint is an undocumented
+  no-auth spike.
 
-When extending toward the doc's design, treat IRC/FFZ-resolution as the throwaway spike it was
-meant to be (per ARCHITECTURE.md §11) and verify current Twitch/7TV/BTTV/FFZ API shapes against
-live docs — these endpoints churn.
+Sending **is** built: OAuth via the **implicit grant** (`auth/twitch-auth.ts`, `chrome.identity`;
+Twitch offers no PKCE for public clients) and a `ChatSink` over Helix `POST /chat/messages`
+(`sinks/twitch-sink.ts`, scope `user:write:chat`). The composer is hidden until login; read stays
+anonymous so lurkers never authenticate. Still unbuilt but interface-ready: **EventSub read,
+Kick, a YouTube send target, an emote picker, and token refresh** (the implicit grant has none —
+the panel re-prompts login on expiry).
+
+These endpoints (IRC tags, FFZ, gql, Helix) churn — verify shapes against live behavior when
+touching them.
 
 ### YouTube DOM adapter gotchas
 
