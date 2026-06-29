@@ -1,7 +1,7 @@
 // The CrossChat panel UI (ARCHITECTURE.md §3, §7). Vanilla TS, no framework.
 // Owns its DOM subtree; the adapter mounts/sizes it and feeds it data.
 import "./panel.css";
-import type { AuthState, ConnectionState, NormalizedMessage } from "../../shared/types";
+import type { AuthState, ConnectionState, NormalizedMessage, ResolvedChannel } from "../../shared/types";
 import {
   DEFAULT_SETTINGS,
   loadSettings,
@@ -45,6 +45,8 @@ export class Panel {
   private emoteTipProvider: HTMLElement;
   private tip: HTMLElement;
   private autoscroll = true;
+  private lastState: ConnectionState = { status: "idle" };
+  private channelLabel: string | null = null;
 
   private settings: ChatSettings = { ...DEFAULT_SETTINGS };
   private systemDark = false;
@@ -235,8 +237,19 @@ export class Panel {
   }
 
   setState(state: ConnectionState): void {
+    this.lastState = state;
     this.header.dataset.status = state.status;
-    this.status.textContent = describeState(state);
+    this.renderStatus();
+  }
+
+  /** Remember which Twitch channel we're connected to, shown in the status. */
+  setChannel(channel: ResolvedChannel): void {
+    this.channelLabel = channel.displayName || channel.login;
+    this.renderStatus();
+  }
+
+  private renderStatus(): void {
+    this.status.textContent = describeState(this.lastState, this.channelLabel);
   }
 
   addMessage(msg: NormalizedMessage): void {
@@ -455,16 +468,17 @@ export class Panel {
   }
 }
 
-function describeState(state: ConnectionState): string {
+function describeState(state: ConnectionState, channel: string | null): string {
+  const at = channel ? ` ${channel}` : "";
   switch (state.status) {
     case "idle":
       return "CrossChat — idle";
     case "connecting":
-      return "Connecting…";
+      return channel ? `Connecting to${at}…` : "Connecting…";
     case "connected":
-      return "Connected";
+      return channel ? `Connected to${at}` : "Connected";
     case "reconnecting":
-      return `Reconnecting (attempt ${state.attempt})…`;
+      return `Reconnecting${at} (attempt ${state.attempt})…`;
     case "disconnected":
       return "Disconnected";
     case "error":

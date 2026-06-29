@@ -272,6 +272,7 @@ class CrossChatAdapter {
           // Remember the resolved login so the change-channel prompt can prefill
           // it, and clear any messages from a previously mapped channel.
           this.currentLogin = msg.channel.login;
+          this.panel.setChannel(msg.channel);
           this.panel.clearMessages();
           this.panel.hideMapping();
           break;
