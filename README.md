@@ -50,3 +50,7 @@ your machine.
 Issues and pull requests are welcome. Keep the build clean and respect the source/sink
 boundaries above. The Twitch and emote-provider APIs change often, so verify request shapes
 against current docs when working on those paths.
+
+## License
+
+[MIT](./LICENSE) © Jaimy Smets
