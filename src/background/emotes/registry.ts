@@ -32,6 +32,11 @@ async function getGlobals(): Promise<RegistryEmote[]> {
     fetchFfzGlobal(),
   ]);
   const emotes = [...stv, ...bttv, ...ffz];
+  // Providers fail soft (return []), so an all-empty result means every one of
+  // them fell over, not that there are no global emotes. Don't cache that — it
+  // would poison the registry for the full TTL. Serve stale if we have it and
+  // retry on the next build. (Mirrors the badge registry.)
+  if (emotes.length === 0) return globalCache?.emotes ?? [];
   globalCache = { emotes, ts: Date.now() };
   return emotes;
 }
@@ -48,6 +53,10 @@ async function getChannelEmotes(
     fetchBttvChannel(userId),
   ]);
   const emotes = [...stv, ...bttv, ...ffzChannelEmotes];
+  // Same guard as globals: don't cache an all-empty result over a failure. A
+  // channel with genuinely no third-party emotes just re-checks on each build,
+  // which is far cheaper than a 30-minute hole after a transient outage.
+  if (emotes.length === 0) return cached?.emotes ?? [];
   channelCache.set(userId, { emotes, ts: Date.now() });
   return emotes;
 }
