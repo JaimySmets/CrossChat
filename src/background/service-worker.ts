@@ -37,6 +37,12 @@ onPanelConnect((port) => {
       case "send":
         void session.send(msg.text);
         break;
+      case "ping":
+        // No-op: the point is the message arriving, which keeps the worker awake.
+        break;
+      case "network":
+        session.setNetworkOnline(msg.online);
+        break;
     }
   });
   port.onDisconnect(() => session.detach());

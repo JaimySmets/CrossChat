@@ -19,6 +19,15 @@ const IRC_URL = "wss://irc-ws.chat.twitch.tv:443";
 const EMOTE_CDN = "https://static-cdn.jtvnw.net/emoticons/v2";
 const MAX_BACKOFF_MS = 30_000;
 
+// Liveness watchdog. A dropped/restored network can leave the WebSocket in a
+// half-open "zombie" state: TCP never got a reset, so no close/error event
+// fires and readyState stays OPEN while messages silently stop. Twitch sends
+// its own PING every ~5min, so any healthy socket sees traffic well inside
+// DEAD_MS; prolonged silence means the socket is dead and must be rebuilt.
+const HEARTBEAT_MS = 15_000; // watchdog tick
+const PING_AFTER_MS = 30_000; // silence before we probe the server with a PING
+const DEAD_MS = 60_000; // silence (incl. no PONG) => zombie socket, force reconnect
+
 export class TwitchIrcSource implements ChatSource {
   readonly platform = "twitch" as const;
 
@@ -28,6 +37,12 @@ export class TwitchIrcSource implements ChatSource {
   private backoff = 1000;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private attempt = 0;
+
+  private lastActivity = 0;
+  private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  // Aborted on teardown to detach a dead socket's listeners in one shot, so a
+  // zombie we replace can't also fire close -> scheduleReconnect behind us.
+  private socketAbort: AbortController | null = null;
 
   private messageCb: (msg: NormalizedMessage) => void = () => {};
   private stateCb: (s: ConnectionState) => void = () => {};
@@ -50,45 +65,139 @@ export class TwitchIrcSource implements ChatSource {
     this.intentionalClose = true;
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     this.reconnectTimer = null;
-    this.ws?.close();
-    this.ws = null;
+    this.teardownSocket();
     this.stateCb({ status: "disconnected" });
   }
 
   private open(): void {
     if (!this.channel) return;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    this.teardownSocket();
     this.stateCb(this.attempt === 0 ? { status: "connecting" } : { status: "reconnecting", attempt: this.attempt });
 
+    const abort = new AbortController();
+    this.socketAbort = abort;
     const ws = new WebSocket(IRC_URL);
     this.ws = ws;
 
-    ws.addEventListener("open", () => {
-      const nick = `justinfan${Math.floor(Math.random() * 90000) + 10000}`;
-      ws.send("CAP REQ :twitch.tv/tags twitch.tv/commands");
-      ws.send(`NICK ${nick}`);
-      ws.send(`JOIN #${this.channel!.login}`);
-      this.attempt = 0;
-      this.backoff = 1000;
-      this.stateCb({ status: "connected" });
-    });
+    ws.addEventListener(
+      "open",
+      () => {
+        const nick = `justinfan${Math.floor(Math.random() * 90000) + 10000}`;
+        ws.send("CAP REQ :twitch.tv/tags twitch.tv/commands");
+        ws.send(`NICK ${nick}`);
+        ws.send(`JOIN #${this.channel!.login}`);
+        this.attempt = 0;
+        this.backoff = 1000;
+        this.markActivity();
+        this.startHeartbeat();
+        this.stateCb({ status: "connected" });
+      },
+      { signal: abort.signal },
+    );
 
-    ws.addEventListener("message", (ev) => {
-      for (const line of String(ev.data).split("\r\n")) {
-        if (line) this.handleLine(line);
-      }
-    });
+    ws.addEventListener(
+      "message",
+      (ev) => {
+        this.markActivity();
+        for (const line of String(ev.data).split("\r\n")) {
+          if (line) this.handleLine(line);
+        }
+      },
+      { signal: abort.signal },
+    );
 
-    ws.addEventListener("close", () => this.scheduleReconnect());
-    ws.addEventListener("error", () => ws.close());
+    ws.addEventListener("close", () => this.scheduleReconnect(), { signal: abort.signal });
+    ws.addEventListener("error", () => ws.close(), { signal: abort.signal });
   }
 
   private scheduleReconnect(): void {
     if (this.intentionalClose) return;
+    this.stopHeartbeat();
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     this.attempt += 1;
     this.stateCb({ status: "reconnecting", attempt: this.attempt });
     const delay = Math.min(this.backoff, MAX_BACKOFF_MS);
     this.backoff = Math.min(this.backoff * 2, MAX_BACKOFF_MS);
     this.reconnectTimer = setTimeout(() => this.open(), delay);
+  }
+
+  private markActivity(): void {
+    this.lastActivity = Date.now();
+  }
+
+  private startHeartbeat(): void {
+    this.stopHeartbeat();
+    this.heartbeatTimer = setInterval(() => {
+      const ws = this.ws;
+      if (!ws || ws.readyState !== WebSocket.OPEN) return;
+      const idle = Date.now() - this.lastActivity;
+      if (idle >= DEAD_MS) {
+        // Silent past the point a healthy socket would have seen server traffic
+        // (or our own PONG) — treat it as a zombie and rebuild immediately.
+        this.attempt += 1;
+        this.backoff = 1000;
+        this.open();
+        return;
+      }
+      if (idle >= PING_AFTER_MS) {
+        // Probe: Twitch replies PONG, which lands as a message and refreshes
+        // lastActivity. No reply within DEAD_MS trips the branch above.
+        try {
+          ws.send("PING :cross-chat");
+        } catch {
+          /* socket transitioning; the watchdog/close path will handle it */
+        }
+      }
+    }, HEARTBEAT_MS);
+  }
+
+  private stopHeartbeat(): void {
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+    }
+  }
+
+  /** Tear down the current socket without letting its listeners reconnect. */
+  private teardownSocket(): void {
+    this.stopHeartbeat();
+    this.socketAbort?.abort();
+    this.socketAbort = null;
+    const ws = this.ws;
+    this.ws = null;
+    if (ws && ws.readyState <= WebSocket.OPEN) {
+      try {
+        ws.close();
+      } catch {
+        /* already closing */
+      }
+    }
+  }
+
+  /**
+   * React to an OS network transition (detected in the content script, since
+   * the service worker doesn't fire reliable online/offline events) instead of
+   * only waiting out the liveness watchdog. Offline surfaces the drop at once
+   * (the socket is dead even if it hasn't fired a close yet); online retries
+   * immediately rather than sitting out the backoff.
+   */
+  setNetworkOnline(online: boolean): void {
+    if (this.intentionalClose || !this.channel) return;
+    if (online) {
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) return;
+      this.backoff = 1000;
+      this.open(); // clears any pending reconnect timer, then connects now
+    } else {
+      // Network gone: drop the (now-dead) socket and show reconnecting right
+      // away. scheduleReconnect keeps retrying with backoff as a backstop; the
+      // next online hint short-circuits it the moment connectivity returns.
+      this.teardownSocket();
+      this.scheduleReconnect();
+    }
   }
 
   private handleLine(line: string): void {

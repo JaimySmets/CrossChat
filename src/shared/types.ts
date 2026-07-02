@@ -54,6 +54,14 @@ export interface ChatSource {
   disconnect(): void;
   onMessage(cb: (msg: NormalizedMessage) => void): void;
   onState(cb: (s: ConnectionState) => void): void;
+  /**
+   * OS network transition, forwarded from the content script. Service workers
+   * don't fire reliable online/offline events, so the durable DOM context
+   * detects them and the source reacts (drop a dead socket / reconnect at once)
+   * instead of waiting out its liveness watchdog. Optional: sources without a
+   * persistent socket can ignore it.
+   */
+  setNetworkOnline?(online: boolean): void;
 }
 
 export interface SendResult {

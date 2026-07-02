@@ -67,6 +67,11 @@ export class Session {
     if (youtubeHandle === this.handle) await this.connect(twitchLogin);
   }
 
+  /** Forward an OS network transition (from the content script) to the source. */
+  setNetworkOnline(online: boolean): void {
+    this.source?.setNetworkOnline?.(online);
+  }
+
   detach(): void {
     this.source?.disconnect();
     this.source = null;

@@ -19,7 +19,14 @@ export type PanelToWorker =
   | { type: "detach" }
   | { type: "login" }
   | { type: "logout" }
-  | { type: "send"; text: string };
+  | { type: "send"; text: string }
+  // Periodic no-op from the panel: receiving it resets the service worker's
+  // idle timer so a silent socket (e.g. a dead channel or a dropped network)
+  // can't let Chrome suspend the worker and freeze the read connection.
+  | { type: "ping" }
+  // OS network transition observed in the content script's DOM context, where
+  // online/offline events are reliable (they aren't in the service worker).
+  | { type: "network"; online: boolean };
 
 /** Messages sent from the service worker to the content-script panel. */
 export type WorkerToPanel =

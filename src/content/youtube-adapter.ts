@@ -68,6 +68,7 @@ class CrossChatAdapter {
   private frame: HTMLElement | null = null;
   private toggle: HTMLButtonElement | null = null;
   private enabled = false;
+  private keepAlive: ReturnType<typeof setInterval> | null = null;
   private frameObserver: MutationObserver | null = null;
   private theaterObserver: MutationObserver | null = null;
   private readonly darkQuery = window.matchMedia("(prefers-color-scheme: dark)");
@@ -76,6 +77,11 @@ class CrossChatAdapter {
     this.darkQuery.addEventListener("change", (e) => this.panel?.setSystemDark(e.matches));
     // YouTube is a SPA — re-evaluate on in-app navigation (§7 SPA caveat).
     window.addEventListener("yt-navigate-finish", () => void this.sync());
+    // The service worker can't observe online/offline reliably, so detect them
+    // here (a real DOM context) and forward the hint so the read socket can
+    // drop/reconnect at once instead of waiting out its liveness watchdog.
+    window.addEventListener("online", () => this.port?.send({ type: "network", online: true }));
+    window.addEventListener("offline", () => this.port?.send({ type: "network", online: false }));
     void this.sync();
   }
 
@@ -210,6 +216,7 @@ class CrossChatAdapter {
 
   private disable(): void {
     if (!this.enabled) return;
+    this.stopKeepAlive();
     this.port?.send({ type: "detach" });
     // Rescue the toggle from the panel header before the panel is destroyed, so
     // it survives as the floating overlay over the revealed native chat.
@@ -269,6 +276,7 @@ class CrossChatAdapter {
     if (this.port) return;
     const port = connectToWorker();
     this.port = port;
+    this.startKeepAlive();
     port.onMessage((msg) => {
       if (!this.panel) return;
       switch (msg.type) {
@@ -301,7 +309,36 @@ class CrossChatAdapter {
     });
     port.onDisconnect(() => {
       this.port = null;
+      this.stopKeepAlive();
+      // The worker went away (crash, or Chrome suspended it). The content
+      // script is the durable side and still knows the channel, so rebuild the
+      // bridge and re-attach instead of leaving the panel frozen on its last
+      // state. A short delay avoids a tight loop if the worker keeps dying.
+      if (!this.enabled) return;
+      this.panel?.setState({ status: "reconnecting", attempt: 1 });
+      setTimeout(() => {
+        if (!this.enabled || this.port || !this.currentHandle) return;
+        this.ensurePort();
+        this.port!.send({ type: "attach", youtubeHandle: this.currentHandle });
+      }, 1000);
     });
+  }
+
+  /**
+   * Keep the service worker awake while chat is enabled. Chrome suspends an MV3
+   * worker after ~30s without activity, and a silent read socket (dead channel
+   * or dropped network) produces none — which would freeze the connection. A
+   * periodic port message resets that idle timer from this never-suspended
+   * context. Cleared on detach/disconnect.
+   */
+  private startKeepAlive(): void {
+    this.stopKeepAlive();
+    this.keepAlive = setInterval(() => this.port?.send({ type: "ping" }), 20_000);
+  }
+
+  private stopKeepAlive(): void {
+    if (this.keepAlive) clearInterval(this.keepAlive);
+    this.keepAlive = null;
   }
 
   private teardown(): void {
