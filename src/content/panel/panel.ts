@@ -29,6 +29,7 @@ export class Panel {
   private status: HTMLElement;
   private actions: HTMLElement;
   private list: HTMLElement;
+  private jumpButton: HTMLButtonElement;
   private mapping: HTMLElement;
   private mappingInput: HTMLInputElement;
   private mappingButton: HTMLButtonElement;
@@ -85,6 +86,18 @@ export class Panel {
 
     this.list = document.createElement("div");
     this.list.className = "cc-messages";
+
+    // Floats over the bottom of the list while the user is scrolled up.
+    this.jumpButton = document.createElement("button");
+    this.jumpButton.className = "cc-jump cc-hidden";
+    this.jumpButton.textContent = "↓ Scroll to bottom";
+    this.jumpButton.addEventListener("click", () => {
+      this.setAutoscroll(true);
+      this.list.scrollTop = this.list.scrollHeight;
+    });
+    const listWrap = document.createElement("div");
+    listWrap.className = "cc-messages-wrap";
+    listWrap.append(this.list, this.jumpButton);
 
     this.mapping = document.createElement("div");
     this.mapping.className = "cc-mapping cc-hidden";
@@ -171,7 +184,7 @@ export class Panel {
     this.tip = document.createElement("div");
     this.tip.className = "cc-tip cc-hidden";
 
-    this.root.append(this.header, this.list, this.mapping, this.composer, this.emoteTip, this.tip);
+    this.root.append(this.header, listWrap, this.mapping, this.composer, this.emoteTip, this.tip);
 
     // Keep keystrokes typed into our inputs from bubbling to the page. YouTube
     // and other extensions bind global single-key shortcuts on document (e.g. a
@@ -223,8 +236,8 @@ export class Panel {
       const nearBottom =
         this.list.scrollHeight - this.list.scrollTop - this.list.clientHeight < 40;
       const byUser = this.pointerHeld || performance.now() < this.userScrollUntil;
-      if (nearBottom) this.autoscroll = true;
-      else if (byUser) this.autoscroll = false;
+      if (nearBottom) this.setAutoscroll(true);
+      else if (byUser) this.setAutoscroll(false);
       else if (this.autoscroll) this.list.scrollTop = this.list.scrollHeight;
       this.refreshEmoteTip();
     });
@@ -304,7 +317,12 @@ export class Panel {
 
   clearMessages(): void {
     this.list.replaceChildren();
-    this.autoscroll = true;
+    this.setAutoscroll(true);
+  }
+
+  private setAutoscroll(on: boolean): void {
+    this.autoscroll = on;
+    this.jumpButton.classList.toggle("cc-hidden", on);
   }
 
   // --- Composer / auth ----------------------------------------------------

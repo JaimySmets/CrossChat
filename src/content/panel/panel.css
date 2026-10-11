@@ -195,12 +195,41 @@
   max-width: 180px;
 }
 
+.cc-messages-wrap {
+  position: relative; /* positioning context for the scroll-to-bottom button */
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
 .cc-messages {
   flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
   padding: 6px 12px;
   overflow-wrap: anywhere;
+}
+.cc-jump {
+  position: absolute;
+  bottom: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  /* A floating surface like .cc-tip and .cc-settings, not an accent action. */
+  padding: 4px 10px;
+  font: inherit;
+  font-size: 12px;
+  white-space: nowrap;
+  color: var(--cc-fg);
+  background: var(--cc-bg);
+  border: 1px solid var(--cc-border);
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  cursor: pointer;
+}
+.cc-jump:hover {
+  background: var(--cc-banner-bg);
 }
 
 .cc-msg {
