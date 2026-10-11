@@ -1,6 +1,6 @@
 {
   "name": "crosschat",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Replace YouTube live chat with a self-rendered Twitch chat panel that renders 7TV/BTTV/FFZ emotes.",
   "type": "module",
   "private": true,
