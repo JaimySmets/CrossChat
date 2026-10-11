@@ -45,6 +45,11 @@ export class Panel {
   private emoteTipProvider: HTMLElement;
   private tip: HTMLElement;
   private autoscroll = true;
+  /** Scrolls before this time (performance.now()) come from a wheel/touch gesture. */
+  private userScrollUntil = 0;
+  /** A pointer is held on the list: scrollbar drag or text selection. */
+  private pointerHeld = false;
+  private onDocPointerUp: (() => void) | null = null;
   private lastState: ConnectionState = { status: "idle" };
   private channelLabel: string | null = null;
 
@@ -192,10 +197,31 @@ export class Panel {
       this.hideTip();
     });
 
+    // Only the user can stop following new messages. Layout changes also fire
+    // `scroll` (moving the window to a monitor with another scale rewraps the
+    // messages and the browser shifts scrollTop), so a scroll away from the
+    // bottom with no user gesture behind it re-pins instead of unfollowing.
+    const markUserScroll = () => {
+      this.userScrollUntil = performance.now() + 500;
+    };
+    this.list.addEventListener("wheel", markUserScroll, { passive: true });
+    this.list.addEventListener("touchmove", markUserScroll, { passive: true });
+    this.list.addEventListener("pointerdown", () => {
+      this.pointerHeld = true;
+    });
+    this.onDocPointerUp = () => {
+      this.pointerHeld = false;
+    };
+    document.addEventListener("pointerup", this.onDocPointerUp, true);
+    document.addEventListener("pointercancel", this.onDocPointerUp, true);
+
     this.list.addEventListener("scroll", () => {
       const nearBottom =
         this.list.scrollHeight - this.list.scrollTop - this.list.clientHeight < 40;
-      this.autoscroll = nearBottom;
+      const byUser = this.pointerHeld || performance.now() < this.userScrollUntil;
+      if (nearBottom) this.autoscroll = true;
+      else if (byUser) this.autoscroll = false;
+      else if (this.autoscroll) this.list.scrollTop = this.list.scrollHeight;
       this.hideEmoteTip(); // the hovered emote has moved out from under the cursor
     });
 
@@ -464,6 +490,11 @@ export class Panel {
     this.unsubscribeSettings = null;
     if (this.onDocClick) document.removeEventListener("click", this.onDocClick, true);
     this.onDocClick = null;
+    if (this.onDocPointerUp) {
+      document.removeEventListener("pointerup", this.onDocPointerUp, true);
+      document.removeEventListener("pointercancel", this.onDocPointerUp, true);
+    }
+    this.onDocPointerUp = null;
     this.root.remove();
   }
 }
