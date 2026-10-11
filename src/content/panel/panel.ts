@@ -50,6 +50,10 @@ export class Panel {
   /** A pointer is held on the list: scrollbar drag or text selection. */
   private pointerHeld = false;
   private onDocPointerUp: (() => void) | null = null;
+  /** The emote whose hover card is showing, and the last pointer position over the list. */
+  private hoveredEmote: HTMLImageElement | null = null;
+  private pointerX = 0;
+  private pointerY = 0;
   private lastState: ConnectionState = { status: "idle" };
   private channelLabel: string | null = null;
 
@@ -222,11 +226,21 @@ export class Panel {
       if (nearBottom) this.autoscroll = true;
       else if (byUser) this.autoscroll = false;
       else if (this.autoscroll) this.list.scrollTop = this.list.scrollHeight;
-      this.hideEmoteTip(); // the hovered emote has moved out from under the cursor
+      this.refreshEmoteTip();
     });
 
     // Delegated hover handling — one pair of listeners covers all emotes.
+    this.list.addEventListener(
+      "pointermove",
+      (e) => {
+        this.pointerX = e.clientX;
+        this.pointerY = e.clientY;
+      },
+      { passive: true },
+    );
     this.list.addEventListener("pointerover", (e) => {
+      this.pointerX = e.clientX;
+      this.pointerY = e.clientY;
       const t = e.target as HTMLElement;
       if (t.classList.contains("cc-emote")) this.showEmoteTip(t as HTMLImageElement);
     });
@@ -284,6 +298,8 @@ export class Panel {
       this.list.firstElementChild?.remove();
     }
     if (this.autoscroll) this.list.scrollTop = this.list.scrollHeight;
+    // Trimming the oldest message can move content without a scroll event.
+    if (this.hoveredEmote) this.refreshEmoteTip();
   }
 
   clearMessages(): void {
@@ -328,6 +344,7 @@ export class Panel {
 
   /** Show the large preview for a hovered emote, positioned just above it. */
   private showEmoteTip(emote: HTMLImageElement): void {
+    this.hoveredEmote = emote;
     this.emoteTipImg.src = emote.currentSrc || emote.src;
     this.emoteTipName.textContent = emote.dataset.name ?? emote.alt;
     this.emoteTipProvider.textContent = (emote.dataset.provider ?? "").toUpperCase();
@@ -348,7 +365,28 @@ export class Panel {
   }
 
   private hideEmoteTip(): void {
+    this.hoveredEmote = null;
     this.emoteTip.classList.add("cc-hidden");
+  }
+
+  /**
+   * Re-place the hover card after the list scrolled or changed. While scrolled up,
+   * each new message trims the oldest one and scroll anchoring shifts scrollTop
+   * to compensate, which fires `scroll` although the hovered emote stays put.
+   * Keep the card while the emote is still under the cursor; hide it otherwise.
+   */
+  private refreshEmoteTip(): void {
+    const emote = this.hoveredEmote;
+    if (emote?.isConnected) {
+      const r = emote.getBoundingClientRect();
+      const x = this.pointerX;
+      const y = this.pointerY;
+      if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {
+        this.showEmoteTip(emote);
+        return;
+      }
+    }
+    this.hideEmoteTip();
   }
 
   // --- Icon-button tooltip -------------------------------------------------
