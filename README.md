@@ -28,6 +28,9 @@ npm run typecheck  # typecheck only
 There is no test suite or linter; `tsc` (strict) is the only static gate, so keep the build
 clean. Verification is manual: build, load it, and exercise it on a live stream.
 
+Releases are automated with release-please from Conventional Commits; see
+[`RELEASING.md`](./RELEASING.md).
+
 ## How it works
 
 Two execution contexts talk over one typed `chrome.runtime` port. The content script renders the

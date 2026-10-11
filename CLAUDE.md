@@ -14,6 +14,10 @@ npm run build      # tsc --noEmit (typecheck) && vite build -> dist/
 npm run typecheck  # tsc --noEmit only
 ```
 
+Releases are automated by release-please (`.github/workflows/release.yml`, see `RELEASING.md`):
+use Conventional Commit messages, and never hand-edit the version in `package.json` /
+`manifest.json` or `CHANGELOG.md`; the release PR owns them.
+
 There is no test suite or linter. `tsc` is the only static gate and `strict` is on (plus
 `noUnusedLocals`/`noUnusedParameters`/`noFallthroughCasesInSwitch`) — keep the build clean.
 
