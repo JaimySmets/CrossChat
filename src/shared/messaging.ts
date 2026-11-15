@@ -33,10 +33,30 @@ export interface WorkerPort {
 export function onPanelConnect(handler: (port: WorkerPort) => void): () => void {
   const listener = (port: chrome.runtime.Port) => {
     if (port.name !== PORT_NAME) return;
+    // The panel can go away (tab closed, navigated, frame re-stamped) while a
+    // socket event is already queued in the worker, before onDisconnect has
+    // fired. postMessage then throws "Attempting to use a disconnected port
+    // object". Treat that throw as the disconnect: drop the message and run the
+    // disconnect handlers once, so the session tears down its sockets.
+    let connected = true;
+    const disconnectCbs: Array<() => void> = [];
+    const markDisconnected = (): void => {
+      if (!connected) return;
+      connected = false;
+      for (const cb of disconnectCbs) cb();
+    };
+    port.onDisconnect.addListener(markDisconnected);
     handler({
-      send: (msg) => port.postMessage(msg),
+      send: (msg) => {
+        if (!connected) return;
+        try {
+          port.postMessage(msg);
+        } catch {
+          markDisconnected();
+        }
+      },
       onMessage: (cb) => port.onMessage.addListener((m) => cb(m as PanelToWorker)),
-      onDisconnect: (cb) => port.onDisconnect.addListener(cb),
+      onDisconnect: (cb) => disconnectCbs.push(cb),
     });
   };
   chrome.runtime.onConnect.addListener(listener);
