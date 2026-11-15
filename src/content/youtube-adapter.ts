@@ -286,6 +286,9 @@ class CrossChatAdapter {
         case "message":
           this.panel.addMessage(msg.message);
           break;
+        case "notice":
+          this.panel.addNotice(msg.notice);
+          break;
         case "channel-resolved":
           // Remember the resolved login so the change-channel prompt can prefill
           // it, and clear any messages from a previously mapped channel.

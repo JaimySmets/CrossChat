@@ -7,6 +7,7 @@ import { TwitchIrcSource } from "../sources/twitch-irc-source";
 import { TwitchSink } from "../sinks/twitch-sink";
 import { buildRegistry, EmoteRegistry } from "../emotes/registry";
 import { applyRegistry } from "../emotes/apply";
+import { EmoteWatcher } from "../emotes/watcher";
 import { buildBadgeRegistry, applyBadges, BadgeRegistry } from "../badges/twitch-badges";
 import * as auth from "../auth/twitch-auth";
 import { getMapping, setMapping } from "./channel-map";
@@ -16,6 +17,9 @@ export class Session {
   private source: ChatSource | null = null;
   private handle: string | null = null;
   private registry: EmoteRegistry | null = null;
+  private watcher: EmoteWatcher | null = null;
+  /** Bumped per connect/detach so a stale async build can't land on a newer channel. */
+  private generation = 0;
   private badges: BadgeRegistry | null = null;
   private channel: ResolvedChannel | null = null;
   private readonly sink: ChatSink = new TwitchSink();
@@ -70,11 +74,15 @@ export class Session {
   /** Forward an OS network transition (from the content script) to the source. */
   setNetworkOnline(online: boolean): void {
     this.source?.setNetworkOnline?.(online);
+    this.watcher?.setNetworkOnline(online);
   }
 
   detach(): void {
+    this.generation += 1;
     this.source?.disconnect();
     this.source = null;
+    this.watcher?.stop();
+    this.watcher = null;
     this.registry = null;
     this.badges = null;
     this.channel = null;
@@ -82,19 +90,28 @@ export class Session {
 
   private async connect(login: string): Promise<void> {
     this.detach();
+    const generation = this.generation;
+    const current = () => generation === this.generation;
     this.port.send({ type: "state", state: { status: "connecting" } });
 
     const { channel, ffzChannelEmotes } = await resolveTwitchChannel(login);
+    if (!current()) return; // superseded by a newer connect/detach while resolving
     this.channel = channel;
     this.port.send({ type: "channel-resolved", channel });
     void this.sendAuthState(); // let the panel show login button / composer
 
     // Build the Emote Registry for this channel; messages are composited in
     // `emit` before they reach the panel (§5). Don't block the chat connection
-    // on registry build — native emotes still render while it loads.
+    // on registry build — native emotes still render while it loads. Once
+    // built, the watcher keeps it in sync with live emote changes.
     void buildRegistry(channel, ffzChannelEmotes)
-      .then((registry) => {
+      .then(({ registry, stvSetId, stvUserId }) => {
+        if (!current()) return;
         this.registry = registry;
+        this.watcher = new EmoteWatcher(channel, registry, { setId: stvSetId, stvUserId }, (notice) =>
+          this.port.send({ type: "notice", notice }),
+        );
+        this.watcher.start();
       })
       .catch(() => {
         /* registry stays null; messages render with native emotes only */
@@ -104,7 +121,7 @@ export class Session {
     // render.ts falls back to CSS role chips.
     void buildBadgeRegistry(channel)
       .then((badges) => {
-        this.badges = badges;
+        if (current()) this.badges = badges;
       })
       .catch(() => {
         /* badges stay null; role chips remain the fallback */

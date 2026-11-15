@@ -53,6 +53,8 @@ owns all connections, identity resolution, and emote compositing.
 The registry merges global + per-channel sets from all three providers into one `name → emote`
 map, resolving collisions by score: channel sets beat global, then provider rank 7TV > BTTV > FFZ
 (`PROVIDER_RANK`). Globals are cached ~6h, per-channel sets ~30m, keyed by Twitch user id.
+While joined, `emotes/watcher.ts` patches the channel layers live (7TV EventAPI + BTTV sockets,
+FFZ polled every 5m); see ARCHITECTURE.md "Live emote updates".
 
 ### Abstractions designed for extension
 

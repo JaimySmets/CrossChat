@@ -2,6 +2,8 @@ import type { EmoteProvider } from "../../shared/types";
 
 /** A third-party emote resolved by a provider fetcher, before merge. */
 export interface RegistryEmote {
+  /** Provider-scoped id; live updates add/remove by it (BTTV deletes carry only the id). */
+  id: string;
   name: string;
   url: string;
   provider: EmoteProvider; // "7tv" | "bttv" | "ffz" (twitch natives come from the source)

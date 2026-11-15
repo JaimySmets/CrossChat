@@ -6,6 +6,7 @@ import type { RegistryEmote } from "./types";
 const API = "https://api.frankerfacez.com/v1";
 
 interface FfzEmote {
+  id: number;
   name: string;
   urls: Record<string, string>; // { "1": "//cdn.../1", "2": ..., "4": ... }
 }
@@ -31,19 +32,28 @@ function toEmotes(sets: Record<string, FfzSet> | undefined, channel: boolean): R
   for (const set of Object.values(sets ?? {})) {
     for (const e of set.emoticons ?? []) {
       const url = pickUrl(e.urls);
-      if (url) out.push({ name: e.name, url, provider: "ffz", channel });
+      if (url && e.name) out.push({ id: String(e.id), name: e.name, url, provider: "ffz", channel });
     }
   }
   return out;
 }
 
-/** Per-channel FFZ set + the channel's Twitch user id (null if unknown). */
-export async function fetchFfzRoom(
-  login: string,
-): Promise<{ userId: string | null; emotes: RegistryEmote[] }> {
+export interface FfzRoom {
+  /** The channel's Twitch user id, null if FFZ has no record of it. */
+  userId: string | null;
+  emotes: RegistryEmote[];
+}
+
+/**
+ * Per-channel FFZ set + the channel's Twitch user id. A 404 (FFZ has never
+ * seen the channel) is a real, empty answer; null means the request failed and
+ * callers should keep whatever they already have.
+ */
+export async function fetchFfzRoom(login: string): Promise<FfzRoom | null> {
   try {
-    const res = await fetch(`${API}/room/${encodeURIComponent(login)}`);
-    if (!res.ok) return { userId: null, emotes: [] };
+    const res = await fetch(`${API}/room/${encodeURIComponent(login)}`, { cache: "no-store" });
+    if (res.status === 404) return { userId: null, emotes: [] };
+    if (!res.ok) return null;
     const data = (await res.json()) as FfzRoomResponse;
     const id = data.room?.twitch_id ?? data.room?._id;
     return {
@@ -51,7 +61,7 @@ export async function fetchFfzRoom(
       emotes: toEmotes(data.sets, true),
     };
   } catch {
-    return { userId: null, emotes: [] };
+    return null;
   }
 }
 

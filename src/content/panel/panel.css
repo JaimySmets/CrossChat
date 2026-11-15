@@ -257,6 +257,15 @@
 .cc-name {
   font-weight: 700;
 }
+
+/* System lines (emote set changes): muted, provider label as the prefix. */
+.cc-notice {
+  color: var(--cc-muted);
+}
+.cc-notice-label {
+  font-weight: 700;
+  margin-right: 6px;
+}
 .cc-badge {
   height: 18px;
   vertical-align: middle;

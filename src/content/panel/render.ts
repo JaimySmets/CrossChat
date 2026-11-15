@@ -1,6 +1,6 @@
 // Pure DOM rendering for normalized messages (ARCHITECTURE.md §4.3).
 // Operates only on NormalizedMessage — no platform-specific knowledge here.
-import type { Fragment, NormalizedMessage } from "../../shared/types";
+import type { ChatNotice, Fragment, NormalizedMessage } from "../../shared/types";
 import type { ChatSettings, ClockFormat } from "../settings";
 
 /** Badge ids we surface as lightweight role chips, in chip-display order. */
@@ -62,6 +62,32 @@ function formatTime(ts: number, clock: ClockFormat): string {
   return new Date(ts).toLocaleTimeString([], opts);
 }
 
+function timeSpan(ts: number, clock: ClockFormat): HTMLElement {
+  const time = document.createElement("span");
+  time.className = "cc-time";
+  time.textContent = formatTime(ts, clock);
+  return time;
+}
+
+/** Build one system line (e.g. an emote added to the channel). */
+export function renderNotice(notice: ChatNotice, settings: ChatSettings): HTMLElement {
+  const line = document.createElement("div");
+  line.className = "cc-msg cc-notice";
+  line.dataset.id = notice.id;
+  line.appendChild(timeSpan(notice.timestamp, settings.clock));
+
+  const label = document.createElement("span");
+  label.className = "cc-notice-label";
+  label.textContent = notice.label;
+  line.appendChild(label);
+
+  const body = document.createElement("span");
+  body.className = "cc-body";
+  body.appendChild(renderFragments(notice.fragments));
+  line.appendChild(body);
+  return line;
+}
+
 /** Build one chat-line element for a normalized message. */
 export function renderMessage(msg: NormalizedMessage, settings: ChatSettings): HTMLElement {
   const line = document.createElement("div");
@@ -73,10 +99,7 @@ export function renderMessage(msg: NormalizedMessage, settings: ChatSettings): H
   }
 
   // Timestamp — always rendered; CSS hides it when timestamps are off.
-  const time = document.createElement("span");
-  time.className = "cc-time";
-  time.textContent = formatTime(msg.timestamp, settings.clock);
-  line.appendChild(time);
+  line.appendChild(timeSpan(msg.timestamp, settings.clock));
 
   // Badges: prefer real artwork when the registry resolved a URL, otherwise fall
   // back to a lightweight CSS role chip (no image fetch). Subscribers surface

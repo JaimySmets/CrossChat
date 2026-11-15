@@ -188,6 +188,27 @@ Emotes are whole-word matches — do not substitute inside larger words.
 ### Caching
 - Global sets: cache with a TTL (e.g. hours), shared across channels.
 - Per-channel sets: cache keyed by `(platform, userId)`, refresh on reconnect or TTL.
+
+### Live emote updates
+While a channel is joined, `emotes/watcher.ts` keeps its channel sets in sync so emotes a
+streamer adds, renames or removes mid-stream apply to new messages without a reload
+(messages already rendered are not re-composited):
+- **7TV:** EventAPI socket (`wss://events.7tv.io/v3`). `emote_set.update` on the active set
+  carries the changed emotes and is applied as a delta; `user.update` on the 7TV user signals an
+  active-set switch (refetch + resubscribe).
+- **BTTV:** socket (`wss://sockets.betterttv.net/ws`), `join_channel twitch:<userId>`, then
+  `emote_create` / `emote_update` / `emote_delete`.
+- **FFZ:** no public push feed; the room endpoint is polled every 5 minutes.
+
+The registry keeps one layer per channel provider and recomputes its merged map on each change,
+so a removed emote hands its name back to whatever it was shadowing. Unparseable events and
+socket reconnects fall back to a REST refetch of that provider's set, and every change drops the
+channel's cache entry so a later attach doesn't revive the old set.
+
+Each applied change is also posted to the panel as a `notice` (`ChatNotice`, rendered as a muted
+system line such as "7TV: xQc added emote <img> GAMBA"). The actor is named only when the event
+carries one; a batch of more than five changes (e.g. an active-set switch) becomes one summary
+line. Emote identity within a layer is id + name, since a 7TV set can list one emote twice.
 - Endpoints/scopes for each provider should be verified against current docs at build time —
   these APIs evolve.
 

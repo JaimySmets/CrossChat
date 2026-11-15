@@ -13,14 +13,14 @@ export interface ResolvedTwitch {
 
 export async function resolveTwitchChannel(login: string): Promise<ResolvedTwitch> {
   const normalized = login.toLowerCase();
-  const { userId, emotes } = await fetchFfzRoom(normalized);
+  const room = await fetchFfzRoom(normalized);
   return {
     channel: {
       platform: "twitch",
       login: normalized,
-      userId: userId ?? "", // empty if FFZ had no record; IRC read still works
+      userId: room?.userId ?? "", // empty if FFZ had no record; IRC read still works
       displayName: login,
     },
-    ffzChannelEmotes: emotes,
+    ffzChannelEmotes: room?.emotes ?? [],
   };
 }

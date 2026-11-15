@@ -1,7 +1,7 @@
 // The CrossChat panel UI (ARCHITECTURE.md §3, §7). Vanilla TS, no framework.
 // Owns its DOM subtree; the adapter mounts/sizes it and feeds it data.
 import "./panel.css";
-import type { AuthState, ConnectionState, NormalizedMessage, ResolvedChannel } from "../../shared/types";
+import type { AuthState, ChatNotice, ConnectionState, NormalizedMessage, ResolvedChannel } from "../../shared/types";
 import {
   DEFAULT_SETTINGS,
   loadSettings,
@@ -9,7 +9,7 @@ import {
   saveSettings,
   type ChatSettings,
 } from "../settings";
-import { renderMessage } from "./render";
+import { renderMessage, renderNotice } from "./render";
 import { buildSettingsView } from "./settings-view";
 
 /** Keep the DOM bounded for long sessions (Phase 4 concern, cheap to do now). */
@@ -306,7 +306,16 @@ export class Panel {
   }
 
   addMessage(msg: NormalizedMessage): void {
-    this.list.appendChild(renderMessage(msg, this.settings));
+    this.appendLine(renderMessage(msg, this.settings));
+  }
+
+  /** System line, e.g. "7TV: Added emote X" when the channel's emotes change. */
+  addNotice(notice: ChatNotice): void {
+    this.appendLine(renderNotice(notice, this.settings));
+  }
+
+  private appendLine(line: HTMLElement): void {
+    this.list.appendChild(line);
     while (this.list.childElementCount > MAX_MESSAGES) {
       this.list.firstElementChild?.remove();
     }

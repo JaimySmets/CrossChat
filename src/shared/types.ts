@@ -31,6 +31,18 @@ export interface NormalizedMessage {
   platform: Platform;
 }
 
+/**
+ * A system line in the chat (not authored by a chatter), e.g. "7TV: Added emote
+ * X" when the channel's emote set changes. Rendered muted, with `label` as the
+ * bold prefix.
+ */
+export interface ChatNotice {
+  id: string;
+  label: string;
+  fragments: Fragment[];
+  timestamp: number;
+}
+
 export interface ResolvedChannel {
   platform: Platform;
   /** e.g. twitch username (lowercased login). */

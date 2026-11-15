@@ -1,5 +1,5 @@
 // Wire protocol for the panel <-> service-worker port (ARCHITECTURE.md §3, §9).
-import type { AuthState, ConnectionState, NormalizedMessage, ResolvedChannel } from "./types";
+import type { AuthState, ChatNotice, ConnectionState, NormalizedMessage, ResolvedChannel } from "./types";
 
 /** Stable name used for chrome.runtime port connections. */
 export const PORT_NAME = "crosschat";
@@ -32,6 +32,7 @@ export type PanelToWorker =
 export type WorkerToPanel =
   | { type: "state"; state: ConnectionState }
   | { type: "message"; message: NormalizedMessage }
+  | { type: "notice"; notice: ChatNotice }
   | { type: "channel-resolved"; channel: ResolvedChannel }
   | { type: "need-mapping"; youtubeHandle: string }
   | { type: "auth"; auth: AuthState }
