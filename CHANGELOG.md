@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.0](https://github.com/JaimySmets/CrossChat/compare/v0.1.0...v0.2.0) (2026-11-15)
+
+
+### Features
+
+* live-update channel emotes and announce changes in chat ([b71af32](https://github.com/JaimySmets/CrossChat/commit/b71af3239436eeb6f6f4aba63bfb4608672c3dfd))
+
+
+### Bug Fixes
+
+* ignore sends to a panel that already disconnected ([b533942](https://github.com/JaimySmets/CrossChat/commit/b533942d44c4638a26117fa05e2bb0c79442e540))
+
 ## [0.1.0](https://github.com/JaimySmets/CrossChat/compare/v0.0.1...v0.1.0) (2026-10-11)
 
 
